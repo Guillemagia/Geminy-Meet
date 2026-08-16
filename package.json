@@ -1,0 +1,13 @@
+{
+  "name": "geminy-meet-backend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Backend real de Geminy Meet: auth, wallet de creditos, chat y videollamada (WebRTC) por WebSocket propio.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=22.5.0"
+  }
+}
