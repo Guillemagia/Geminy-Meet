@@ -203,6 +203,34 @@
   .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--bg-surface-2);border:1px solid var(--border);color:var(--ink);padding:11px 18px;border-radius:12px;font-size:12.5px;box-shadow:var(--shadow);opacity:0;pointer-events:none;transition:all .25s;z-index:80;max-width:88vw;text-align:center;}
   .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
   .toast.warn{border-color:var(--danger);}
+
+  /* ---- Discover feed ---- */
+  #discover{align-items:flex-start;justify-content:center;overflow:hidden;}
+  .tier-filters{display:flex;gap:6px;overflow-x:auto;padding-bottom:10px;margin-bottom:6px;}
+  .tier-chip{flex-shrink:0;background:var(--bg-surface);border:1px solid var(--border);color:var(--ink-muted);font-size:12px;padding:7px 14px;border-radius:999px;font-weight:600;white-space:nowrap;}
+  .tier-chip.active{background:var(--rose-soft);border-color:var(--rose);color:var(--ink);}
+  .card-stack{flex:1;display:flex;gap:14px;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;padding:6px 6px 16px;-webkit-overflow-scrolling:touch;}
+  .swipe-card{scroll-snap-align:center;flex:0 0 88%;max-width:340px;background:var(--bg-surface);border:1px solid var(--border);border-radius:20px;overflow:hidden;display:flex;flex-direction:column;box-shadow:var(--shadow);}
+  .swipe-card .photo-wrap{position:relative;width:100%;aspect-ratio:3/4;background:var(--bg-surface-2);}
+  .swipe-card .photo-wrap img{width:100%;height:100%;object-fit:cover;display:block;}
+  .swipe-card .status-chip{position:absolute;top:12px;left:12px;display:flex;align-items:center;gap:6px;background:rgba(26,18,32,.78);backdrop-filter:blur(6px);border-radius:999px;padding:5px 11px;font-size:11px;color:var(--ink);}
+  .status-led{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+  .status-led.online{background:var(--ok);box-shadow:0 0 6px var(--ok);}
+  .status-led.in-call{background:var(--danger);box-shadow:0 0 6px var(--danger);}
+  .status-led.offline{background:#7a7a7a;}
+  .swipe-card .tier-chip-badge{position:absolute;top:12px;right:12px;background:var(--ember-soft);color:var(--ember);font-size:10.5px;font-weight:700;padding:5px 10px;border-radius:999px;}
+  .swipe-card .body{padding:16px;display:flex;flex-direction:column;gap:8px;flex:1;}
+  .swipe-card .name-row{display:flex;align-items:baseline;gap:8px;}
+  .swipe-card .name-row .name{font-family:'Fraunces',serif;font-size:19px;}
+  .swipe-card .name-row .age{color:var(--ink-muted);font-size:14px;}
+  .swipe-card .bio{font-size:12.5px;color:var(--ink-muted);line-height:1.5;min-height:36px;}
+  .swipe-card .ratings-mini{display:flex;flex-wrap:wrap;gap:5px;}
+  .swipe-card .actions{display:flex;gap:8px;margin-top:auto;}
+  .swipe-card .actions button{flex:1;border-radius:11px;font-size:12.5px;font-weight:700;padding:11px 6px;}
+  .swipe-card .btn-chat{background:var(--bg-surface-2);border:1px solid var(--border);color:var(--ink);}
+  .swipe-card .btn-call{background:linear-gradient(135deg,var(--ember),var(--rose));color:#241a15;}
+  .swipe-card .btn-follow{background:transparent;border:1px solid var(--border);color:var(--ink-muted);width:44px;flex:0 0 44px;font-size:16px;padding:11px 0;}
+  .swipe-card .btn-follow.following{border-color:var(--rose);color:var(--rose);}
 </style>
 </head>
 <body>
@@ -309,19 +337,32 @@
   <div class="card">
     <div class="eyebrow">Un espacio para dos</div>
     <h1>Empieza un encuentro</h1>
-    <p class="sub">Crea una sala privada o únete con el código que te compartieron. Nadie más puede entrar.</p>
+    <p class="sub">Descubre quién está en línea ahora, o entra directo con un código de sala.</p>
 
-    <div class="field">
-      <label>Código de sala (déjalo vacío para crear una nueva)</label>
+    <button class="btn-primary" id="goDiscoverBtn">Descubrir personas</button>
+
+    <div class="field" style="margin-top:18px;">
+      <label>¿Tienes un código de sala? (opcional)</label>
       <input type="text" id="roomInput" placeholder="ej. luna-247" maxlength="30">
     </div>
-    <div class="row-actions">
-      <button class="btn-primary" id="enterBtn">Entrar a la sala</button>
-    </div>
+    <button class="btn-secondary" id="enterBtn">Entrar con ese código</button>
 
     <div class="offer-banner hidden" id="offerBanner"></div>
     <p class="hint" id="earningsLine"></p>
-    <p class="hint">Abre esta misma página en otra pestaña o en otro teléfono, con el mismo código de sala, para probarlo entre dos cuentas.</p>
+  </div>
+</div>
+
+<!-- DISCOVER -->
+<div class="view" id="discover">
+  <div style="width:100%;max-width:480px;margin:0 auto;padding:20px 16px;display:flex;flex-direction:column;height:100%;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+      <button class="btn-ghost-sm" id="backFromDiscover">← Volver</button>
+      <span class="eyebrow" id="discoverTitle">En línea ahora</span>
+      <span style="width:60px;"></span>
+    </div>
+    <div class="tier-filters" id="tierFilters"></div>
+    <div class="card-stack" id="cardStack"></div>
+    <p class="hint" id="discoverEmpty" style="text-align:center;"></p>
   </div>
 </div>
 
@@ -613,10 +654,11 @@ function renderOfferBanner(){
 }
 
 function goToLobby(){
-  ['auth','profileView','room'].forEach(v => $(v).classList.remove('active'));
+  ['auth','profileView','room','discover'].forEach(v => $(v).classList.remove('active'));
   $('lobby').classList.add('active');
   $('topRightAuthed').classList.remove('hidden');
   renderWallet();
+  ensureSocket();
 }
 
 if(token && me){
@@ -633,7 +675,7 @@ function fallbackAvatarSvg(letter){
 }
 
 function openProfileEditor(){
-  ['auth','lobby','room'].forEach(v => $(v).classList.remove('active'));
+  ['auth','lobby','room','discover'].forEach(v => $(v).classList.remove('active'));
   $('profileView').classList.add('active');
   $('profileAvatarPreview').src = me.avatarUrl || fallbackAvatarSvg((me.name||'?')[0].toUpperCase());
   $('profileAge').value = me.age || '';
@@ -716,31 +758,44 @@ function randomRoom(){
 }
 $('roomInput').placeholder = 'ej. ' + randomRoom();
 $('enterBtn').addEventListener('click', () => {
-  currentRoom = $('roomInput').value.trim().toLowerCase().replace(/\s+/g,'-') || randomRoom();
-  enterRoom();
+  const code = $('roomInput').value.trim().toLowerCase().replace(/\s+/g,'-') || randomRoom();
+  enterRoom(code, false);
 });
+$('goDiscoverBtn').addEventListener('click', openDiscover);
+$('backFromDiscover').addEventListener('click', goToLobby);
 
-function enterRoom(){
-  $('lobby').classList.remove('active');
+function enterRoom(code, autoStartCall){
+  currentRoom = code;
+  ['lobby','discover'].forEach(v => $(v).classList.remove('active'));
   $('room').classList.add('active');
   $('roomPill').textContent = 'Sala: ' + currentRoom;
   $('ratePill').textContent = '— créditos / min';
   $('chatWho').textContent = 'Sala privada · ' + currentRoom;
   $('chatHeaderAvatar').src = fallbackAvatarSvg('?');
-  addSystemMsg('Entraste como ' + me.name + '. Comparte el código "' + currentRoom + '" con la otra persona.');
-  connectSocket();
+  $('messages').innerHTML = '';
+  addSystemMsg('Entraste como ' + me.name + '.');
+  pendingAutoCall = !!autoStartCall;
+  ensureSocket();
+  wsSend({ type:'join', room: currentRoom });
 }
 
-/* ---------------- WebSocket ---------------- */
-function connectSocket(){
+/* ---------------- WebSocket (conexión persistente para toda la sesión) ---------------- */
+let pendingAutoCall = false;
+let socketReady = false;
+
+function ensureSocket(){
+  if(ws && (ws.readyState === 0 || ws.readyState === 1)) return; // ya conectando o conectado
   const host = API_BASE ? API_BASE.replace(/^https?:\/\//, '') : location.host;
   const proto = (API_BASE ? API_BASE.startsWith('https') : location.protocol === 'https:') ? 'wss' : 'ws';
   ws = new WebSocket(proto + '://' + host + '/ws?token=' + encodeURIComponent(token));
-  ws.addEventListener('open', () => ws.send(JSON.stringify({ type:'join', room: currentRoom })));
+  ws.addEventListener('open', () => { socketReady = true; });
   ws.addEventListener('message', (ev) => handleSocketMessage(JSON.parse(ev.data)));
-  ws.addEventListener('close', () => setPeerStatus(false, 'Desconectado del servidor'));
+  ws.addEventListener('close', () => { socketReady = false; setPeerStatus(false, 'Desconectado del servidor'); });
 }
-function wsSend(obj){ if(ws && ws.readyState === 1) ws.send(JSON.stringify(obj)); }
+function wsSend(obj){
+  if(ws && ws.readyState === 1) ws.send(JSON.stringify(obj));
+  else if(ws && ws.readyState === 0) ws.addEventListener('open', () => ws.send(JSON.stringify(obj)), { once:true });
+}
 
 async function setPeer(id, userId, role){
   peerConnId = id; peerUserId = userId; peerRole = role;
@@ -754,6 +809,10 @@ async function setPeer(id, userId, role){
     }catch{}
   } else {
     $('ratePill').textContent = 'Gratis (miembro)';
+  }
+  if(pendingAutoCall){
+    pendingAutoCall = false;
+    $('startCallBtn').click();
   }
 }
 
@@ -793,6 +852,9 @@ function handleSocketMessage(msg){
       break;
     case 'signal':
       handleSignal(msg.payload);
+      break;
+    case 'presence-update':
+      updateCardStatus(msg.userId, msg.status);
       break;
   }
 }
@@ -970,6 +1032,7 @@ function newPeerConnection(){
     $('startCallBtn').style.display = 'none';
     $('endCallBtn').style.display = 'flex';
     wasConnectedThisCall = true;
+    wsSend({ type:'presence', status:'in-call' });
     if(isCaller) startBilling();
     $('callStatus').innerHTML = 'En llamada';
   };
@@ -1051,6 +1114,7 @@ function startBilling(){
 
 function endCallUI(){
   const shouldRate = wasConnectedThisCall && me.role === 'member' && peerRole === 'companion';
+  if(wasConnectedThisCall) wsSend({ type:'presence', status:'online' });
   clearInterval(callTimer);
   $('remoteVideo').classList.remove('live');
   $('presenceRing').classList.remove('active');
@@ -1118,6 +1182,107 @@ document.querySelectorAll('.pack button').forEach(btn => {
     setTimeout(() => { $('rechargeModal').classList.remove('active'); $('packsView').style.display='block'; $('processingView').style.display='none'; }, 700);
   });
 });
+
+/* ---------------- Feed de descubrimiento ---------------- */
+const TIER_ORDER = ['Nueva','Plata','Oro','Diamante'];
+let discoverProfiles = [];
+let activeTierFilter = 'Todas';
+
+function openDiscover(){
+  ['auth','profileView','lobby','room'].forEach(v => $(v).classList.remove('active'));
+  $('discover').classList.add('active');
+  $('discoverTitle').textContent = me.role === 'member' ? 'Anfitrionas en línea' : 'Miembros en línea';
+  ensureSocket();
+  loadDiscover();
+}
+
+async function loadDiscover(){
+  $('cardStack').innerHTML = '';
+  $('discoverEmpty').textContent = 'Cargando…';
+  try{
+    const data = await api('/api/discover');
+    discoverProfiles = data.profiles;
+    renderTierFilters();
+    renderCardStack();
+  }catch(err){
+    $('discoverEmpty').textContent = err.message;
+  }
+}
+
+function renderTierFilters(){
+  const box = $('tierFilters');
+  if(me.role !== 'member'){ box.innerHTML = ''; return; }
+  const chips = ['Todas', ...TIER_ORDER];
+  box.innerHTML = chips.map(t => `<button class="tier-chip ${t===activeTierFilter?'active':''}" data-tier="${t}">${t}</button>`).join('');
+  box.querySelectorAll('.tier-chip').forEach(chip => {
+    chip.addEventListener('click', () => { activeTierFilter = chip.dataset.tier; renderTierFilters(); renderCardStack(); });
+  });
+}
+
+function renderCardStack(){
+  let list = discoverProfiles;
+  if(me.role === 'member' && activeTierFilter !== 'Todas'){
+    list = list.filter(p => p.tier && p.tier.name === activeTierFilter);
+  }
+  const stack = $('cardStack');
+  $('discoverEmpty').textContent = list.length ? '' : 'Nadie por aquí todavía.';
+  stack.innerHTML = list.map(p => `
+    <div class="swipe-card" data-user="${p.id}">
+      <div class="photo-wrap">
+        <img src="${p.avatarUrl || fallbackAvatarSvg((p.name||'?')[0].toUpperCase())}" alt="">
+        <span class="status-chip"><span class="status-led ${p.status}"></span>${statusLabel(p.status)}</span>
+        ${p.tier ? `<span class="tier-chip-badge">${p.tier.name}</span>` : ''}
+      </div>
+      <div class="body">
+        <div class="name-row"><span class="name">${escapeHtml(p.name)}</span>${p.age ? `<span class="age">${p.age}</span>` : ''}</div>
+        <div class="bio">${escapeHtml(p.bio || 'Sin biografía todavía.')}</div>
+        ${p.ratings && p.ratings.count ? `<div class="ratings-mini"><span class="rating-chip">★ ${p.ratings.count} calificaciones</span></div>` : ''}
+        <div class="actions">
+          <button class="btn-follow ${p.isFollowing?'following':''}" data-action="follow" title="Seguir">${p.isFollowing ? '✓' : '+'}</button>
+          <button class="btn-chat" data-action="chat">💬 Chat</button>
+          <button class="btn-call" data-action="call">📹 Llamar</button>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function statusLabel(status){
+  return status === 'online' ? 'En línea' : status === 'in-call' ? 'En llamada' : 'Desconectada';
+}
+
+function updateCardStatus(userId, status){
+  const p = discoverProfiles.find(x => x.id === userId);
+  if(p) p.status = status;
+  const card = $('cardStack').querySelector(`.swipe-card[data-user="${userId}"]`);
+  if(!card) return;
+  const led = card.querySelector('.status-led');
+  const chip = card.querySelector('.status-chip');
+  if(led){ led.className = 'status-led ' + status; }
+  if(chip){ chip.innerHTML = `<span class="status-led ${status}"></span>${statusLabel(status)}`; }
+}
+
+$('cardStack').addEventListener('click', async (e) => {
+  const btn = e.target.closest('button[data-action]');
+  if(!btn) return;
+  const card = e.target.closest('.swipe-card');
+  const userId = card.dataset.user;
+  const profile = discoverProfiles.find(p => p.id === userId);
+  if(!profile) return;
+
+  if(btn.dataset.action === 'follow'){
+    try{
+      const data = await api('/api/follow/toggle', { method:'POST', body:{ userId } });
+      profile.isFollowing = data.following;
+      btn.classList.toggle('following', data.following);
+      btn.textContent = data.following ? '✓' : '+';
+    }catch(err){ toast(err.message, true); }
+    return;
+  }
+  if(btn.dataset.action === 'chat'){ enterRoom(profile.dmRoom, false); return; }
+  if(btn.dataset.action === 'call'){ enterRoom(profile.dmRoom, true); return; }
+});
+
 </script>
 </body>
 </html>
