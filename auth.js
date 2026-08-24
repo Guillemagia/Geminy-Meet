@@ -13,8 +13,13 @@ function hashPassword(password) {
 }
 
 function verifyPassword(password, hash, salt) {
-  const attempt = crypto.scryptSync(password, salt, 64).toString('hex');
-  return crypto.timingSafeEqual(Buffer.from(attempt), Buffer.from(hash));
+  const attempt = crypto.scryptSync(password, salt || '', 64).toString('hex');
+  const a = Buffer.from(attempt);
+  const b = Buffer.from(hash || '');
+  // timingSafeEqual revienta si los buffers miden distinto; con un hash guardado
+  // de otro largo (por ejemplo, la cuenta de una IA) la respuesta correcta es "no", no un error 500.
+  if (a.length !== b.length) return false;
+  return crypto.timingSafeEqual(a, b);
 }
 
 function base64url(input) {

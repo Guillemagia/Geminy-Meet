@@ -1,0 +1,11 @@
+# Base de datos local (se crea sola al arrancar el servidor)
+geminy.db
+geminy.db-journal
+geminy.db-wal
+
+# Dependencias: se instalan con `npm install`, no se suben al repositorio
+node_modules/
+
+# Variables de entorno con claves (ANTHROPIC_API_KEY, ADMIN_KEY, DEEPL_API_KEY…)
+.env
+.env.local

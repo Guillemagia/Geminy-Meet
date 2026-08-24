@@ -141,6 +141,14 @@
   .msg img,.msg video{max-width:200px;border-radius:10px;display:block;margin-top:4px;}
   .msg .cost{display:block;font-size:9.5px;opacity:.65;margin-top:3px;}
   .msg .auto-tag{font-size:9px;opacity:.6;margin-left:6px;font-style:italic;}
+  .msg .ai-tag{font-size:9px;margin-left:6px;font-weight:800;letter-spacing:.06em;color:var(--ember);opacity:.9;}
+  .msg.ai-notice{align-self:center;text-align:center;max-width:92%;background:var(--ember-soft);border:1px solid rgba(232,168,96,.45);color:var(--ink);font-size:11.5px;line-height:1.5;padding:8px 12px;border-radius:12px;}
+  .msg.typing{align-self:flex-start;background:var(--bg-surface-2);border:1px solid var(--border);border-bottom-left-radius:4px;display:flex;gap:4px;align-items:center;padding:11px 13px;}
+  .msg.typing i{width:5px;height:5px;border-radius:50%;background:var(--ink-muted);display:block;animation:blip 1.1s infinite;}
+  .msg.typing i:nth-child(2){animation-delay:.18s;}
+  .msg.typing i:nth-child(3){animation-delay:.36s;}
+  @keyframes blip{0%,60%,100%{opacity:.25;transform:translateY(0);}30%{opacity:1;transform:translateY(-3px);}}
+  .ai-pill{background:rgba(232,168,96,.9);color:#241a15;font-size:9px;font-weight:900;letter-spacing:.08em;padding:3px 7px;border-radius:999px;}
   .msg .translate-btn{display:inline-block;margin-left:6px;font-size:10px;opacity:.6;cursor:pointer;text-decoration:underline;}
   .msg .translation{display:block;margin-top:4px;padding-top:4px;border-top:1px dashed rgba(0,0,0,.2);font-style:italic;font-size:12px;}
   .msg.gift{background:var(--ember-soft);border:1px solid rgba(232,168,96,.4);text-align:center;font-size:13.5px;}
@@ -234,6 +242,7 @@
   .grid-card .call-badge.online{box-shadow:0 0 0 2px var(--ok);}
   .grid-card .call-badge.in-call{box-shadow:0 0 0 2px var(--danger);}
   .grid-card .call-badge.offline{box-shadow:0 0 0 2px #7a7a7a;opacity:.55;}
+  .grid-card .top-row .left-pills{display:flex;gap:5px;align-items:center;}
 </style>
 </head>
 <body>
@@ -373,6 +382,7 @@
       <div class="tab-row" id="tabRow"></div>
       <div class="tier-filters" id="tierFilters"></div>
       <div class="offer-banner hidden" id="offerBanner" style="margin-top:0;"></div>
+      <p class="hint" id="earningsLine" style="margin:6px 0 0;"></p>
     </div>
     <div class="card-grid" id="cardGrid"></div>
     <p class="hint" id="discoverEmpty" style="text-align:center;"></p>
@@ -414,6 +424,7 @@
         <img class="chat-header-avatar" id="chatHeaderAvatar" src="" alt="">
         <div>
           <div class="who" id="chatWho">Chat privado</div>
+          <span class="ai-pill hidden" id="chatAiPill" style="display:inline-block;margin:2px 0 3px;">IA</span>
           <div class="status-line"><span class="status-dot" id="peerStatusDot"></span><span id="peerStatusText">Esperando conexión…</span></div>
         </div>
       </div>
@@ -656,12 +667,14 @@ function renderWallet(){
     $('tierBadge').classList.add('hidden');
   }
   const earningsLine = $('earningsLine');
-  if(me.role === 'companion'){
-    let txt = 'Ganancias (70% de lo que gastan contigo): ' + me.earnings;
-    if(me.verificationStatus === 'pending') txt += ' (cuenta pendiente de aprobación)';
-    earningsLine.textContent = txt;
-  } else {
-    earningsLine.textContent = '';
+  if(earningsLine){
+    if(me.role === 'companion'){
+      let txt = 'Ganancias (70% de lo que gastan contigo): ' + me.earnings;
+      if(me.verificationStatus === 'pending') txt += ' (cuenta pendiente de aprobación)';
+      earningsLine.textContent = txt;
+    } else {
+      earningsLine.textContent = '';
+    }
   }
   renderOfferBanner();
 }
@@ -800,6 +813,9 @@ $('backToDiscoverBtn').addEventListener('click', goToLobby);
 
 function enterRoom(code, autoStartCall){
   currentRoom = code;
+  aiPeer = null;
+  $('chatAiPill').classList.add('hidden');
+  $('startCallBtn').style.display = 'flex';
   ['lobby','discover'].forEach(v => $(v).classList.remove('active'));
   $('room').classList.add('active');
   $('roomPill').textContent = 'Sala: ' + currentRoom;
@@ -816,6 +832,7 @@ function enterRoom(code, autoStartCall){
 /* ---------------- WebSocket (conexión persistente para toda la sesión) ---------------- */
 let pendingAutoCall = false;
 let socketReady = false;
+let aiPeer = null; // anfitriona de inteligencia artificial al otro lado de esta sala, si la hay
 
 function ensureSocket(){
   if(ws && (ws.readyState === 0 || ws.readyState === 1)) return; // ya conectando o conectado
@@ -831,14 +848,14 @@ function wsSend(obj){
   else if(ws && ws.readyState === 0) ws.addEventListener('open', () => ws.send(JSON.stringify(obj)), { once:true });
 }
 
-async function setPeer(id, userId, role){
+async function setPeer(id, userId, role, isAi){
   peerConnId = id; peerUserId = userId; peerRole = role;
-  setPeerStatus(true, (role === 'companion' ? 'Anfitriona' : 'Miembro') + ' conectada');
+  setPeerStatus(true, isAi ? 'Inteligencia artificial · siempre disponible' : (role === 'companion' ? 'Anfitriona' : 'Miembro') + ' conectada');
   if(role === 'companion' && userId){
     try{
       const data = await api('/api/users/' + userId);
       peerRate = data.profile.tier ? data.profile.tier.ratePerMin : 10;
-      $('ratePill').textContent = peerRate + ' créditos / min';
+      $('ratePill').textContent = isAi ? 'Chat gratis · sin videollamada' : peerRate + ' créditos / min';
       $('chatHeaderAvatar').src = data.profile.avatarUrl || fallbackAvatarSvg('?');
     }catch{}
   } else {
@@ -846,16 +863,28 @@ async function setPeer(id, userId, role){
   }
   if(pendingAutoCall){
     pendingAutoCall = false;
-    $('startCallBtn').click();
+    if(!isAi) $('startCallBtn').click();
   }
+}
+
+// Una anfitriona de IA no tiene cámara detrás: se deja claro y se esconde el botón de llamar.
+function setupAiRoom(peer){
+  aiPeer = peer;
+  $('chatWho').textContent = peer.name;
+  $('chatAiPill').classList.remove('hidden');
+  $('startCallBtn').style.display = 'none';
+  $('avatarCore').innerHTML = 'Chat con IA<br>sin videollamada';
+  $('callStatus').textContent = peer.name + ' es un personaje de inteligencia artificial: solo chat.';
+  addAiNotice('Estás chateando con <b>' + escapeHtml(peer.name) + '</b>, un personaje de <b>inteligencia artificial</b>. No es una persona real, no puede hacer videollamadas y el chat de texto es gratis.');
 }
 
 function handleSocketMessage(msg){
   switch(msg.type){
     case 'error': toast(msg.message, true); break;
     case 'joined':
+      if(msg.aiPeer) setupAiRoom(msg.aiPeer);
       (msg.history || []).forEach(renderHistoryItem);
-      if(msg.peers && msg.peers.length) setPeer(msg.peers[0].id, msg.peers[0].userId, msg.peers[0].role);
+      if(msg.peers && msg.peers.length) setPeer(msg.peers[0].id, msg.peers[0].userId, msg.peers[0].role, msg.peers[0].isAi);
       break;
     case 'peer-joined':
       setPeer(msg.id, msg.userId, msg.role);
@@ -868,7 +897,14 @@ function handleSocketMessage(msg){
       endCallUI();
       break;
     case 'chat':
-      addMsg(escapeHtml(msg.text), msg.userId === me.id ? 'me' : 'them', msg.isAuto);
+      removeTypingBubble();
+      addMsg(escapeHtml(msg.text), msg.userId === me.id ? 'me' : 'them', msg.isAuto, msg.isAi);
+      break;
+    case 'ai-typing':
+      showTypingBubble();
+      break;
+    case 'ai-typing-stop':
+      removeTypingBubble();
       break;
     case 'media':
       renderMediaBubble(msg.data, msg.isVideo, msg.userId === me.id ? 'me' : 'them', msg.cost);
@@ -902,7 +938,7 @@ function setPeerStatus(online, text){
 function renderHistoryItem(item){
   const who = item.userId === me.id ? 'me' : 'them';
   if(item.kind === 'text'){
-    addMsg(escapeHtml(item.content), who, item.isAuto);
+    addMsg(escapeHtml(item.content), who, item.isAuto, item.isAi);
   } else if(item.kind === 'gift'){
     const gift = GIFTS.find(g => g.id === item.content);
     renderGiftBubble(item.name, gift ? gift.emoji : '🎁', gift ? gift.name : 'un regalo', item.cost, who);
@@ -912,15 +948,36 @@ function renderHistoryItem(item){
 }
 
 /* ---------------- Chat ---------------- */
-function addMsg(text, who, isAuto){
+function addMsg(text, who, isAuto, isAi){
   const div = document.createElement('div');
   div.className = 'msg ' + who;
   const msgId = 'm' + Math.random().toString(36).slice(2,9);
   div.innerHTML = `<span class="mtext" id="${msgId}">${text}</span>` +
+    (isAi ? '<span class="ai-tag">IA</span>' : '') +
     (isAuto ? '<span class="auto-tag">· automático</span>' : '') +
     `<span class="translate-btn" data-target="${msgId}" data-original="${encodeURIComponent(text)}">Traducir</span>`;
   $('messages').appendChild(div);
   $('messages').scrollTop = $('messages').scrollHeight;
+}
+function addAiNotice(html){
+  const div = document.createElement('div');
+  div.className = 'msg ai-notice';
+  div.innerHTML = html;
+  $('messages').appendChild(div);
+  $('messages').scrollTop = $('messages').scrollHeight;
+}
+function showTypingBubble(){
+  if($('typingBubble')) return;
+  const div = document.createElement('div');
+  div.className = 'msg them typing';
+  div.id = 'typingBubble';
+  div.innerHTML = '<i></i><i></i><i></i>';
+  $('messages').appendChild(div);
+  $('messages').scrollTop = $('messages').scrollHeight;
+}
+function removeTypingBubble(){
+  const el = $('typingBubble');
+  if(el) el.remove();
 }
 function addSystemMsg(text){
   const div = document.createElement('div');
@@ -1276,14 +1333,19 @@ function renderCardGrid(){
     <div class="grid-card" data-user="${p.id}">
       <img src="${p.avatarUrl || fallbackAvatarSvg((p.name||'?')[0].toUpperCase())}" alt="">
       <div class="top-row">
-        ${p.tier ? `<span class="tier-pill">${p.tier.name}</span>` : '<span></span>'}
+        <span class="left-pills">
+          ${p.tier ? `<span class="tier-pill">${p.tier.name}</span>` : ''}
+          ${p.isAi ? '<span class="ai-pill" title="Personaje de inteligencia artificial">IA</span>' : ''}
+        </span>
         <button class="follow-heart ${p.isFollowing?'following':''}" data-action="follow" title="Seguir">${p.isFollowing ? '♥' : '♡'}</button>
       </div>
       <div class="bottom-fade">
         <div class="gname">${escapeHtml(p.name)}${p.age ? `<span class="gage">${p.age}</span>` : ''}</div>
-        ${p.preferredLanguage ? `<div class="glang">${languageLabel(p.preferredLanguage)}</div>` : ''}
+        ${p.isAi ? '<div class="glang">Inteligencia artificial · solo chat</div>' : (p.preferredLanguage ? `<div class="glang">${languageLabel(p.preferredLanguage)}</div>` : '')}
       </div>
-      <button class="call-badge ${p.status}" data-action="call" title="Llamar">📹</button>
+      ${p.isAi
+        ? '<button class="call-badge online" data-action="chat" title="Chatear">💬</button>'
+        : `<button class="call-badge ${p.status}" data-action="call" title="Llamar">📹</button>`}
     </div>
   `).join('');
 }
@@ -1319,20 +1381,26 @@ $('cardGrid').addEventListener('click', async (e) => {
     }catch(err){ toast(err.message, true); }
     return;
   }
+  if(action === 'chat'){ enterRoom(profile.dmRoom, false); return; }
   if(action === 'call'){ enterRoom(profile.dmRoom, true); return; }
   openQuickView(profile); // tocar la tarjeta (fuera de los botones) abre la vista rápida
 });
 
 function buildPeerMeta(p){
+  if(!p) return '';
+  if(p.isAi) return [p.age ? p.age + ' años' : null, 'Inteligencia artificial', 'Solo chat'].filter(Boolean).join(' · ');
   return [p.age ? p.age + ' años' : null, p.tier ? p.tier.name : null, statusLabel(p.status)].filter(Boolean).join(' · ');
 }
 
 function openQuickView(p){
   quickViewUserId = p.id;
   $('peerProfileAvatar').src = p.avatarUrl || fallbackAvatarSvg((p.name||'?')[0].toUpperCase());
-  $('peerProfileName').textContent = p.name;
+  $('peerProfileName').innerHTML = escapeHtml(p.name) + (p.isAi ? ' <span class="ai-pill">IA</span>' : '');
   $('peerProfileMeta').textContent = buildPeerMeta(p);
-  $('peerProfileBio').textContent = p.bio || 'Sin biografía todavía.';
+  $('peerProfileBio').textContent = p.isAi
+    ? 'Personaje de inteligencia artificial: no es una persona real y no puede hacer videollamadas. ' + (p.bio || '')
+    : (p.bio || 'Sin biografía todavía.');
+  $('peerProfileCallBtn').style.display = p.isAi ? 'none' : '';
   const r = p.ratings;
   $('peerProfileRatings').innerHTML = (r && r.count) ? RATING_CATEGORIES.map(c => r[c.id] ? `<span class="rating-chip">${c.label}: <b>${r[c.id]}★</b></span>` : '').join('') : (p.tier ? '<span class="rating-chip">Sin calificaciones todavía</span>' : '');
   $('peerProfileGallery').innerHTML = (p.gallery||[]).map(u => `<img src="${u}">`).join('');

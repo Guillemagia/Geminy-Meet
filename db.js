@@ -1,5 +1,6 @@
 // db.js — persistencia con node:sqlite (nativo de Node, sin dependencias externas)
 const { DatabaseSync } = require('node:sqlite');
+const crypto = require('node:crypto');
 const path = require('node:path');
 
 const DB_PATH = path.join(__dirname, 'geminy.db');
@@ -23,6 +24,10 @@ CREATE TABLE IF NOT EXISTS users (
   worked_minutes INTEGER NOT NULL DEFAULT 0,   -- minutos acumulados en llamada (solo anfitrionas)
   low_credit_since INTEGER,             -- timestamp desde que anda con <10 créditos, o NULL
   first_purchase_used INTEGER NOT NULL DEFAULT 0,
+  referral_code TEXT,                   -- código de invitación propio (solo anfitrionas)
+  referred_by_user_id TEXT,             -- quién la invitó (solo miembros que usaron un código)
+  is_ai INTEGER NOT NULL DEFAULT 0,     -- 1 = anfitriona de inteligencia artificial, no una persona real
+  ai_persona TEXT DEFAULT '',           -- descripción de personalidad que se le manda al modelo
   created_at INTEGER NOT NULL
 );
 
@@ -63,6 +68,7 @@ CREATE TABLE IF NOT EXISTS messages (
   content TEXT,
   cost INTEGER NOT NULL DEFAULT 0,
   is_auto INTEGER NOT NULL DEFAULT 0,   -- 1 = mensaje de apertura automático
+  is_ai INTEGER NOT NULL DEFAULT 0,     -- 1 = lo escribió una anfitriona de IA
   created_at INTEGER NOT NULL
 );
 
@@ -97,6 +103,21 @@ CREATE TABLE IF NOT EXISTS follows (
 );
 `);
 
+// Migraciones suaves: si la base de datos se creó con una versión anterior del esquema,
+// le agregamos las columnas nuevas sin perder los datos que ya tenía.
+function ensureColumn(table, column, definition) {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all();
+  if (!cols.some((c) => c.name === column)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  }
+}
+ensureColumn('users', 'referral_code', 'TEXT');
+ensureColumn('users', 'referred_by_user_id', 'TEXT');
+ensureColumn('users', 'is_ai', 'INTEGER NOT NULL DEFAULT 0');
+ensureColumn('users', 'ai_persona', "TEXT DEFAULT ''");
+ensureColumn('messages', 'is_ai', 'INTEGER NOT NULL DEFAULT 0');
+db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_referral_code ON users(referral_code) WHERE referral_code IS NOT NULL`);
+
 const FREE_SIGNUP_CREDITS = 100;
 
 // Niveles de anfitriona por minutos acumulados en llamada. Sube sola, sin aprobación.
@@ -118,14 +139,31 @@ function nowId() {
 }
 
 // ---------- Users ----------
-function createUser({ name, email, passwordHash, passwordSalt, role, avatarUrl, preferredLanguage }) {
+// Código de invitación de una anfitriona: corto, legible y sin caracteres que se confundan (0/O, 1/I).
+const REFERRAL_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+function generateReferralCode() {
+  for (let intento = 0; intento < 20; intento++) {
+    let code = '';
+    for (let i = 0; i < 6; i++) code += REFERRAL_ALPHABET[Math.floor(Math.random() * REFERRAL_ALPHABET.length)];
+    if (!getUserByReferralCode(code)) return code;
+  }
+  return null; // prácticamente imposible; sin código la anfitriona sigue funcionando igual
+}
+
+function getUserByReferralCode(code) {
+  if (!code) return null;
+  return db.prepare(`SELECT * FROM users WHERE referral_code = ?`).get(String(code).trim().toUpperCase()) || null;
+}
+
+function createUser({ name, email, passwordHash, passwordSalt, role, avatarUrl, preferredLanguage, referredByUserId }) {
   const id = nowId();
   const safeRole = role === 'companion' ? 'companion' : 'member';
   const verificationStatus = safeRole === 'companion' ? 'pending' : 'approved';
+  const referralCode = safeRole === 'companion' ? generateReferralCode() : null;
   db.prepare(
-    `INSERT INTO users (id, name, email, password_hash, password_salt, role, verification_status, avatar_url, preferred_language, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).run(id, name, email.toLowerCase(), passwordHash, passwordSalt, safeRole, verificationStatus, avatarUrl || '', preferredLanguage || 'es', Date.now());
+    `INSERT INTO users (id, name, email, password_hash, password_salt, role, verification_status, avatar_url, preferred_language, referral_code, referred_by_user_id, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(id, name, email.toLowerCase(), passwordHash, passwordSalt, safeRole, verificationStatus, avatarUrl || '', preferredLanguage || 'es', referralCode, referredByUserId || null, Date.now());
   db.prepare(`INSERT INTO wallets (user_id, credits_balance, earnings_balance) VALUES (?, ?, 0)`).run(id, FREE_SIGNUP_CREDITS);
   logTx(id, 'topup', FREE_SIGNUP_CREDITS, 'Bono de bienvenida');
   return getUserById(id);
@@ -189,7 +227,8 @@ function transferCreditsWithSplit(payerId, recipientUser, amount, meta, companio
   logTx(payerId, 'spend', amount, meta || '');
 
   let recipientCut = 0;
-  if (recipientUser && recipientUser.role === 'companion') {
+  // Una anfitriona de IA no es una persona que pueda cobrar: su parte se queda íntegra en la plataforma.
+  if (recipientUser && recipientUser.role === 'companion' && !recipientUser.is_ai) {
     recipientCut = Math.round((amount * companionSharePercent) / 100);
     db.prepare(`UPDATE wallets SET earnings_balance = earnings_balance + ? WHERE user_id = ?`).run(recipientCut, recipientUser.id);
     logTx(recipientUser.id, 'earn', recipientCut, meta || '');
@@ -222,19 +261,24 @@ function ensureRoom(code) {
   db.prepare(`INSERT OR IGNORE INTO rooms (code, created_at) VALUES (?, ?)`).run(code, Date.now());
 }
 
-function saveMessage({ roomCode, userId, name, kind, content, cost, isAuto }) {
+function saveMessage({ roomCode, userId, name, kind, content, cost, isAuto, isAi }) {
   const id = nowId();
   db.prepare(
-    `INSERT INTO messages (id, room_code, user_id, name, kind, content, cost, is_auto, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).run(id, roomCode, userId, name, kind, content, cost || 0, isAuto ? 1 : 0, Date.now());
+    `INSERT INTO messages (id, room_code, user_id, name, kind, content, cost, is_auto, is_ai, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(id, roomCode, userId, name, kind, content, cost || 0, isAuto ? 1 : 0, isAi ? 1 : 0, Date.now());
   return id;
 }
 
+// Devuelve los ÚLTIMOS `limit` mensajes de la sala, en orden cronológico.
+// (Antes tomaba los primeros 80, así que en una conversación larga el historial se quedaba
+// congelado en el principio y nunca mostraba lo reciente.)
 function getRoomHistory(roomCode, limit = 80) {
   return db
     .prepare(
-      `SELECT id, user_id as userId, name, kind, content, cost, is_auto as isAuto, created_at as createdAt
-       FROM messages WHERE room_code = ? ORDER BY created_at ASC LIMIT ?`
+      `SELECT * FROM (
+         SELECT id, user_id as userId, name, kind, content, cost, is_auto as isAuto, is_ai as isAi, created_at as createdAt
+         FROM messages WHERE room_code = ? ORDER BY created_at DESC LIMIT ?
+       ) ORDER BY createdAt ASC`
     )
     .all(roomCode, limit);
 }
@@ -331,12 +375,64 @@ function toggleFollow(followerId, followedId) {
   return true;
 }
 
+// ---------- Anfitrionas de inteligencia artificial ----------
+// Son filas normales en `users` (role='companion') con is_ai = 1: así reutilizan perfil,
+// historial de chat y descubrimiento sin duplicar nada. No tienen contraseña utilizable.
+function listAiCompanions() {
+  return db.prepare(`SELECT * FROM users WHERE is_ai = 1 ORDER BY created_at ASC`).all();
+}
+
+function getAiCompanionByEmail(email) {
+  return db.prepare(`SELECT * FROM users WHERE email = ? AND is_ai = 1`).get(String(email).toLowerCase()) || null;
+}
+
+function createAiCompanion({ name, email, age, bio, avatarUrl, persona, openers, preferredLanguage }) {
+  const id = nowId();
+  // Hash aleatorio con la misma forma que uno real: nadie puede iniciar sesión con la cuenta de una IA.
+  const impossible = crypto.randomBytes(64).toString('hex');
+  const impossibleSalt = crypto.randomBytes(16).toString('hex');
+  db.prepare(
+    `INSERT INTO users (id, name, email, password_hash, password_salt, role, verification_status,
+                        age, bio, avatar_url, gallery, openers, preferred_language, referral_code,
+                        is_ai, ai_persona, created_at)
+     VALUES (?, ?, ?, ?, ?, 'companion', 'approved', ?, ?, ?, '[]', ?, ?, ?, 1, ?, ?)`
+  ).run(
+    id, name, String(email).toLowerCase(), impossible, impossibleSalt,
+    age || null, bio || '', avatarUrl || '',
+    JSON.stringify(Array.isArray(openers) ? openers.slice(0, 5) : []),
+    preferredLanguage || 'es', generateReferralCode(), persona || '', Date.now()
+  );
+  db.prepare(`INSERT INTO wallets (user_id, credits_balance, earnings_balance) VALUES (?, 0, 0)`).run(id);
+  return getUserById(id);
+}
+
+function updateAiCompanion(userId, { name, age, bio, avatarUrl, persona, openers, preferredLanguage }) {
+  const user = getUserById(userId);
+  if (!user || !user.is_ai) return null;
+  db.prepare(
+    `UPDATE users SET name = ?, age = ?, bio = ?, avatar_url = ?, openers = ?, preferred_language = ?, ai_persona = ? WHERE id = ?`
+  ).run(
+    name !== undefined ? name : user.name,
+    age !== undefined ? age : user.age,
+    bio !== undefined ? bio : user.bio,
+    avatarUrl !== undefined ? avatarUrl : user.avatar_url,
+    openers !== undefined ? JSON.stringify(openers.slice(0, 5)) : user.openers,
+    preferredLanguage !== undefined ? preferredLanguage : user.preferred_language,
+    persona !== undefined ? persona : user.ai_persona,
+    userId
+  );
+  return getUserById(userId);
+}
+
 // ---------- Descubrimiento ----------
 // Devuelve todos los usuarios del rol opuesto (para el feed deslizable).
-function listDiscoverable(oppositeRole, limit = 100) {
-  return db
-    .prepare(`SELECT * FROM users WHERE role = ? ORDER BY created_at DESC LIMIT ?`)
-    .all(oppositeRole, limit);
+// Si el traductor de IA está apagado (sin clave de API), `includeAi = false` esconde
+// a las anfitrionas de IA en vez de mostrar tarjetas que no podrían contestar.
+function listDiscoverable(oppositeRole, limit = 100, includeAi = true) {
+  const sql = includeAi
+    ? `SELECT * FROM users WHERE role = ? ORDER BY created_at DESC LIMIT ?`
+    : `SELECT * FROM users WHERE role = ? AND is_ai = 0 ORDER BY created_at DESC LIMIT ?`;
+  return db.prepare(sql).all(oppositeRole, limit);
 }
 
 module.exports = {
@@ -346,6 +442,7 @@ module.exports = {
   createUser,
   getUserByEmail,
   getUserById,
+  getUserByReferralCode,
   updateProfile,
   addWorkedMinutes,
   getWallet,
@@ -366,5 +463,9 @@ module.exports = {
   isFollowing,
   toggleFollow,
   listDiscoverable,
+  listAiCompanions,
+  getAiCompanionByEmail,
+  createAiCompanion,
+  updateAiCompanion,
   logTx,
 };

@@ -10,6 +10,7 @@ const { URL } = require('node:url');
 
 const db = require('./db');
 const auth = require('./auth');
+const ai = require('./ai');
 const { WSServer } = require('./ws');
 
 const PORT = process.env.PORT || 8080;
@@ -58,6 +59,10 @@ const userPresence = new Map();
 function presenceStatus(userId) {
   return userPresence.get(userId) || 'offline';
 }
+
+// Prefijo del "id de conexión" falso que se le da a una anfitriona de IA dentro de una sala.
+// No tiene socket detrás: solo sirve para que el frontend la trate como un participante más.
+const AI_CONN_PREFIX = 'ai:';
 
 // ---------------- Helpers HTTP ----------------
 function send(res, status, obj) {
@@ -134,6 +139,7 @@ function publicUser(user) {
     name: user.name,
     email: user.email,
     role: user.role,
+    isAi: !!user.is_ai,
     verificationStatus: user.verification_status,
     referralCode: user.role === 'companion' ? user.referral_code : null,
     age: user.age,
@@ -269,7 +275,7 @@ const routes = {
     const requester = requireAuth(req);
     if (!requester) return send(res, 401, { error: 'No autenticado.' });
     const oppositeRole = requester.role === 'member' ? 'companion' : 'member';
-    const rows = db.listDiscoverable(oppositeRole);
+    const rows = db.listDiscoverable(oppositeRole, 100, ai.enabled());
     const profiles = rows.map((u) => ({
       ...publicProfile(u),
       status: presenceStatus(u.id),
@@ -365,6 +371,58 @@ const routes = {
     if (req.headers['x-admin-key'] !== ADMIN_KEY) return send(res, 403, { error: 'No autorizado.' });
     send(res, 200, { totalPlatformRevenue: db.getPlatformRevenueTotal() });
   },
+
+  // ---- Anfitrionas de inteligencia artificial ----
+  'GET /api/admin/ai': async (req, res) => {
+    if (req.headers['x-admin-key'] !== ADMIN_KEY) return send(res, 403, { error: 'No autorizado.' });
+    send(res, 200, {
+      enabled: ai.enabled(),
+      model: ai.MODEL,
+      note: ai.enabled() ? undefined : 'Falta la variable de entorno ANTHROPIC_API_KEY: las anfitrionas de IA están ocultas.',
+      companions: db.listAiCompanions().map((u) => ({
+        id: u.id,
+        name: u.name,
+        email: u.email,
+        age: u.age,
+        bio: u.bio,
+        avatarUrl: u.avatar_url,
+        openers: safeJsonArray(u.openers),
+        preferredLanguage: u.preferred_language,
+        persona: u.ai_persona,
+      })),
+    });
+  },
+
+  // Crea una anfitriona de IA nueva, o actualiza una que ya existe si mandas {userId}.
+  'POST /api/admin/ai': async (req, res) => {
+    if (req.headers['x-admin-key'] !== ADMIN_KEY) return send(res, 403, { error: 'No autorizado.' });
+    const body = await readJsonBody(req);
+    const patch = {};
+    if (typeof body.name === 'string') patch.name = body.name.trim().slice(0, 24);
+    if (typeof body.bio === 'string') patch.bio = body.bio.slice(0, 500);
+    if (typeof body.persona === 'string') patch.persona = body.persona.slice(0, 4000);
+    if (typeof body.avatarUrl === 'string') patch.avatarUrl = body.avatarUrl.slice(0, 500000);
+    if (typeof body.preferredLanguage === 'string') patch.preferredLanguage = body.preferredLanguage.slice(0, 5);
+    if (Number.isInteger(body.age) && body.age >= 18 && body.age <= 99) patch.age = body.age;
+    if (Array.isArray(body.openers)) {
+      patch.openers = body.openers.filter((x) => typeof x === 'string').slice(0, 5).map((x) => x.slice(0, 200));
+    }
+
+    if (body.userId) {
+      const updated = db.updateAiCompanion(body.userId, patch);
+      if (!updated) return send(res, 404, { error: 'No existe una anfitriona de IA con ese userId.' });
+      registerAiPresence();
+      return send(res, 200, { companion: publicProfile(updated) });
+    }
+
+    if (!patch.name) return send(res, 400, { error: 'Falta el nombre.' });
+    const email = (body.email || '').trim().toLowerCase() ||
+      'ia-' + patch.name.toLowerCase().replace(/[^a-z0-9]+/g, '') + '-' + Date.now().toString(36) + '@geminy.local';
+    if (db.getUserByEmail(email)) return send(res, 409, { error: 'Ya existe una cuenta con ese correo.' });
+    const created = db.createAiCompanion({ ...patch, email });
+    registerAiPresence();
+    send(res, 201, { companion: publicProfile(created) });
+  },
 };
 
 function publicProfile(user) {
@@ -373,7 +431,9 @@ function publicProfile(user) {
     id: user.id,
     name: user.name,
     role: user.role,
+    isAi: !!user.is_ai,
     age: user.age,
+    preferredLanguage: user.preferred_language,
     bio: user.bio,
     avatarUrl: user.avatar_url,
     gallery: safeJsonArray(user.gallery),
@@ -555,6 +615,71 @@ function maybeScheduleAutoOpener(roomCode) {
   }, AUTO_OPENER_DELAY_MS);
 }
 
+// ---------------- Anfitrionas de inteligencia artificial ----------------
+// No tienen socket: el servidor habla por ellas cuando alguien entra a su sala privada.
+
+// Las marcamos siempre "en línea" — un bot no se desconecta, y sería mentira pintarlo de gris.
+function registerAiPresence() {
+  if (!ai.enabled()) return;
+  for (const a of db.listAiCompanions()) userPresence.set(a.id, 'online');
+}
+
+// ¿La sala `code` es la sala privada entre `userId` y alguna anfitriona de IA?
+// El código de sala es un hash de los dos ids, así que no se puede invertir: probamos
+// contra el roster de IA, que es corto (unas pocas), en vez de guardar otra tabla.
+function aiPeerForRoom(code, userId) {
+  if (!ai.enabled()) return null;
+  for (const a of db.listAiCompanions()) {
+    if (dmRoomCode(userId, a.id) === code) return a;
+  }
+  return null;
+}
+
+function aiPeerDescriptor(aiUser) {
+  return { id: AI_CONN_PREFIX + aiUser.id, name: aiUser.name, userId: aiUser.id, role: 'companion', isAi: true };
+}
+
+// Guarda y difunde un mensaje escrito por la IA, como si lo hubiera mandado ella.
+function emitAiMessage(roomCode, aiUser, text) {
+  db.saveMessage({ roomCode, userId: aiUser.id, name: aiUser.name, kind: 'text', content: text, cost: 0, isAi: true });
+  broadcastRoom(roomCode, {
+    type: 'chat',
+    from: AI_CONN_PREFIX + aiUser.id,
+    userId: aiUser.id,
+    name: aiUser.name,
+    text,
+    isAi: true,
+  });
+}
+
+// Una respuesta a la vez por sala: si el miembro manda tres mensajes seguidos, se contestan
+// juntos en el siguiente turno en vez de disparar tres llamadas a la API en paralelo.
+const aiInFlight = new Set();
+
+async function runAiTurn(roomCode, aiUser, memberUser, conn) {
+  if (aiInFlight.has(roomCode)) return;
+  aiInFlight.add(roomCode);
+  try {
+    broadcastRoom(roomCode, { type: 'ai-typing', userId: aiUser.id, name: aiUser.name });
+    const history = db.getRoomHistory(roomCode, 40);
+    const result = await ai.reply({ aiUser, memberUser, history });
+    if (result.error) {
+      broadcastRoom(roomCode, { type: 'ai-typing-stop', userId: aiUser.id });
+      if (conn) conn.send({ type: 'error', message: result.error });
+      return;
+    }
+    await new Promise((r) => setTimeout(r, ai.typingDelayMs(result.text)));
+    broadcastRoom(roomCode, { type: 'ai-typing-stop', userId: aiUser.id });
+    emitAiMessage(roomCode, aiUser, result.text);
+  } catch (e) {
+    console.error('[ai] turno fallido:', e);
+    broadcastRoom(roomCode, { type: 'ai-typing-stop', userId: aiUser.id });
+    if (conn) conn.send({ type: 'error', message: 'La IA no pudo responder en este momento.' });
+  } finally {
+    aiInFlight.delete(roomCode);
+  }
+}
+
 wss.on('connection', (conn, req) => {
   const u = new URL(req.url, 'http://localhost');
   const token = u.searchParams.get('token');
@@ -568,6 +693,7 @@ wss.on('connection', (conn, req) => {
   }
 
   let currentRoom = null;
+  let currentAiPeer = null; // anfitriona de IA al otro lado de esta sala, si la hay
 
   allConns.add(conn);
   const isFirstConnForUser = !userConns.has(authedUser.id);
@@ -596,13 +722,29 @@ wss.on('connection', (conn, req) => {
       if (!rooms.has(code)) rooms.set(code, new Map());
       rooms.get(code).set(conn.id, { conn, userId: user.id, name: user.name, role: user.role, hasSpoken: false });
 
+      currentAiPeer = aiPeerForRoom(code, user.id);
+      const peers = roomPeers(code).filter((p) => p.id !== conn.id);
+      if (currentAiPeer) peers.push(aiPeerDescriptor(currentAiPeer));
+
+      const history = db.getRoomHistory(code, 80);
       conn.send({
         type: 'joined',
         room: code,
-        peers: roomPeers(code).filter((p) => p.id !== conn.id),
-        history: db.getRoomHistory(code, 80),
+        peers,
+        history,
+        aiPeer: currentAiPeer ? aiPeerDescriptor(currentAiPeer) : null,
       });
       broadcastRoom(code, { type: 'peer-joined', id: conn.id, name: user.name, userId: user.id, role: user.role }, conn.id);
+
+      // Primera vez que alguien entra a la sala de una IA: ella saluda y se presenta como IA.
+      if (currentAiPeer && !history.length) {
+        const aiUser = currentAiPeer;
+        setTimeout(() => {
+          if (db.getRoomHistory(code, 1).length) return; // alguien ya escribió: no interrumpimos
+          emitAiMessage(code, aiUser, ai.openerFor(aiUser));
+        }, 1200);
+      }
+
       maybeScheduleAutoOpener(code);
       return;
     }
@@ -624,6 +766,7 @@ wss.on('connection', (conn, req) => {
       if (presence) presence.hasSpoken = true; // cancela la apertura automática si ya habló de verdad
       db.saveMessage({ roomCode: currentRoom, userId: user.id, name: user.name, kind: 'text', content: text, cost: 0 });
       broadcastRoom(currentRoom, { type: 'chat', from: conn.id, userId: user.id, name: user.name, text });
+      if (currentAiPeer) runAiTurn(currentRoom, currentAiPeer, user, conn);
       return;
     }
 
@@ -664,6 +807,7 @@ wss.on('connection', (conn, req) => {
       });
       pushWallet(user.id);
       if (recipientUser) pushWallet(recipientUser.id);
+      if (currentAiPeer) runAiTurn(currentRoom, currentAiPeer, user, conn);
       return;
     }
 
@@ -674,7 +818,7 @@ wss.on('connection', (conn, req) => {
         return;
       }
       const recipient = otherPeerInRoom(currentRoom, conn.id);
-      const recipientUser = recipient ? db.getUserById(recipient.userId) : null;
+      const recipientUser = recipient ? db.getUserById(recipient.userId) : (currentAiPeer || null);
       const ok = db.transferCreditsWithSplit(user.id, recipientUser, gift.cost, 'Regalo (' + gift.name + ') en sala ' + currentRoom, COMPANION_SHARE_PERCENT);
       if (!ok) {
         conn.send({ type: 'error', message: 'No tienes créditos suficientes para ese regalo.' });
@@ -687,10 +831,16 @@ wss.on('connection', (conn, req) => {
       });
       pushWallet(user.id);
       if (recipientUser) pushWallet(recipientUser.id);
+      if (currentAiPeer) runAiTurn(currentRoom, currentAiPeer, user, conn);
       return;
     }
 
     if (msg.type === 'call-tick') {
+      // Detrás de una anfitriona de IA no hay cámara ni persona: no se cobra ni un minuto.
+      if (currentAiPeer) {
+        conn.send({ type: 'call-denied', reason: 'Las anfitrionas de inteligencia artificial son solo de chat, no hacen videollamadas.' });
+        return;
+      }
       const recipient = otherPeerInRoom(currentRoom, conn.id);
       const recipientUser = recipient ? db.getUserById(recipient.userId) : null;
       const rate = recipientUser && recipientUser.role === 'companion'
@@ -723,7 +873,11 @@ wss.on('connection', (conn, req) => {
 
     if (msg.type === 'signal') {
       const recipient = otherPeerInRoom(currentRoom, conn.id);
-      if (recipient) recipient.conn.send({ type: 'signal', from: conn.id, payload: msg.payload });
+      if (recipient) {
+        recipient.conn.send({ type: 'signal', from: conn.id, payload: msg.payload });
+      } else if (currentAiPeer && msg.payload && msg.payload.kind !== 'hangup') {
+        conn.send({ type: 'call-denied', reason: currentAiPeer.name + ' es una anfitriona de inteligencia artificial: solo puede chatear, no hacer videollamadas.' });
+      }
       return;
     }
   });
@@ -739,6 +893,7 @@ wss.on('connection', (conn, req) => {
         broadcastPresence(authedUser.id, 'offline');
       }
     }
+    currentAiPeer = null;
     if (currentRoom && rooms.has(currentRoom)) {
       rooms.get(currentRoom).delete(conn.id);
       broadcastRoom(currentRoom, { type: 'peer-left', id: conn.id, userId: authedUser.id });
@@ -752,4 +907,11 @@ wss.on('connection', (conn, req) => {
 
 server.listen(PORT, () => {
   console.log(`Geminy Meet backend corriendo en http://localhost:${PORT}`);
+  if (ai.enabled()) {
+    const roster = ai.ensureRoster(db);
+    registerAiPresence();
+    console.log(`[ai] ${roster.length} anfitriona(s) de inteligencia artificial activas (modelo ${ai.MODEL}).`);
+  } else {
+    console.log('[ai] ANTHROPIC_API_KEY no configurada: las anfitrionas de inteligencia artificial están desactivadas.');
+  }
 });

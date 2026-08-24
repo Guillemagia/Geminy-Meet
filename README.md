@@ -6,7 +6,69 @@ Este backend reemplaza la versión "todo en el navegador" del prototipo anterior
 - Los créditos y las ganancias viven en una base de datos en el servidor (`geminy.db`), no en `localStorage`.
 - El chat, las fotos/videos y el cobro por minuto de llamada pasan por el servidor, que es quien decide si hay saldo o no — el navegador ya no puede "inventarse" créditos.
 - La videollamada usa WebRTC real (cámara/micrófono de verdad); el servidor solo transporta la señalización, el video nunca pasa por él.
-- Nota técnica: este entorno de desarrollo no tenía acceso a internet para instalar paquetes de npm, así que el servidor está escrito solo con módulos nativos de Node (`http`, `crypto`, `node:sqlite`) en vez de Express/ws. Funciona igual de bien, pero si más adelante quieres migrarlo a Express es totalmente compatible.
+- Nota técnica: el servidor está escrito casi entero con módulos nativos de Node (`http`, `crypto`, `node:sqlite`) en vez de Express/ws — funciona igual de bien y si algún día quieres migrarlo a Express es totalmente compatible. La única dependencia de npm es `@anthropic-ai/sdk`, que es lo que mueve a las anfitrionas de IA. Antes de arrancar el servidor por primera vez, corre `npm install`.
+
+## Nuevo: anfitrionas de inteligencia artificial (Claude)
+
+Ahora la app puede tener **anfitrionas movidas por IA** que chatean solas, sin que haya nadie del otro lado. Están construidas sobre [Claude](https://www.anthropic.com) (modelo `claude-opus-5`) y viven en la misma tabla de usuarios que las anfitrionas reales, así que aparecen en el feed, tienen perfil, historial de chat y se puede "seguirlas" como a cualquier otra.
+
+### Lo que decidí y por qué
+
+Te lo pongo por delante porque son decisiones que afectan al negocio, no solo al código:
+
+- **Siempre dicen que son una IA.** La tarjeta del feed lleva una insignia naranja **IA**, la cabecera del chat también, cada mensaje suyo va marcado, y al abrir la sala sale un aviso: *"Estás chateando con Aria, un personaje de inteligencia artificial. No es una persona real."* Además el propio modelo tiene la instrucción de decirlo si se lo preguntan. Cobrarle a alguien por hablar con un bot haciéndole creer que es una mujer real es fraude, y es motivo de expulsión inmediata de la App Store y de Google Play — así que no lo construí de esa forma. Con la etiqueta puesta es un producto perfectamente legítimo; muchas apps del sector lo hacen así.
+- **Solo chatean, no hacen videollamadas.** No hay cámara detrás. Su tarjeta muestra un botón de 💬 en vez del de 📹, el botón de llamar desaparece dentro de su sala, y el servidor rechaza cobrar minutos de llamada en una sala de IA (antes se le hubieran cobrado 10 créditos por minuto a alguien hablando con nadie).
+- **No acumulan "ganancias".** Si un miembro le manda un regalo a una IA, el 100% queda en la plataforma (tuyo), en vez de fingir que "ella" se lleva el 70%. El texto sigue siendo gratis, igual que con las anfitrionas reales.
+- **Nunca piden dinero.** El modelo tiene prohibido pedir créditos, regalos, recargas, teléfono, redes sociales o datos bancarios. Tampoco promete quedar en persona, ni produce contenido sexual explícito, y si detecta que quien escribe podría ser menor de edad corta el tono coqueto de inmediato.
+
+### Cómo activarlas
+
+1. Crea una cuenta en https://console.anthropic.com y saca una clave de API.
+2. En Render → tu servicio → Environment → agrega `ANTHROPIC_API_KEY` con esa clave.
+3. Reinicia el servicio. En el arranque verás en los logs: `[ai] 3 anfitriona(s) de inteligencia artificial activas`.
+
+**Sin esa variable no pasa nada malo**: las anfitrionas de IA simplemente no se crean ni aparecen en el feed, y el resto de la app funciona exactamente igual que antes.
+
+Vienen tres por defecto (Aria, Sol y Nube), cada una con su personalidad, su avatar y sus frases de saludo. Se crean solas la primera vez que arranca el servidor con la clave puesta.
+
+### Cambiarlas o agregar más (sin tocar código)
+
+Dos rutas nuevas de administrador, con la misma clave `X-Admin-Key` que las demás:
+
+```
+GET  /api/admin/ai     -- lista las anfitrionas de IA con su personalidad
+POST /api/admin/ai     -- crea una nueva, o actualiza una existente si mandas {"userId":"..."}
+```
+
+El cuerpo del POST acepta `name`, `age`, `bio`, `persona`, `avatarUrl`, `openers` (hasta 5 frases de saludo) y `preferredLanguage`. El campo `persona` es la descripción de personalidad que se le manda al modelo — ahí es donde defines si es tímida, bromista, directa, de qué le gusta hablar, etc.
+
+### Costos y frenos de gasto
+
+Cada respuesta es una llamada a la API de Anthropic y se paga por uso (unos centavos por cada varias decenas de mensajes, según el largo de la conversación). Para que no se dispare:
+
+- Solo se manda el contexto de los últimos 24 mensajes de la sala, recortados.
+- Las respuestas están topadas a 400 tokens (son mensajes de chat, no ensayos).
+- Un mismo miembro puede pedir como máximo 25 respuestas cada 5 minutos.
+- Una respuesta a la vez por sala: si manda tres mensajes seguidos, se contestan juntos en vez de disparar tres llamadas.
+
+Puedes cambiar el modelo con la variable `AI_MODEL` si algún día quieres uno más barato.
+
+### Lo que todavía no hacen
+
+- No ven las fotos ni los videos que les mandes (te lo dicen ellas mismas). Se puede agregar — el modelo sí sabe ver imágenes — pero no lo activé para no subir el costo sin que lo decidas tú.
+- No inician conversaciones por su cuenta: saludan cuando entras a su sala por primera vez, y de ahí en adelante contestan.
+- No recuerdan nada fuera del historial de esa sala.
+
+## Arreglos que hice de paso en esta ronda
+
+Mientras conectaba la IA me topé con cosas que ya estaban rotas en el repositorio. Las arreglé porque sin ellas no se podía ni probar la app:
+
+- **La app no pasaba de la pantalla de inicio de sesión.** `public/index.html` buscaba un elemento `#earningsLine` que el rediseño del feed había borrado, y el error tumbaba todo el arranque de sesión justo después de crear la cuenta. Devolví esa línea (ahora en la cabecera de "Descubrir", donde una anfitriona sí la ve) y blindé el código para que no vuelva a pasar.
+- **El código de invitación reventaba el registro.** `server.js` llamaba a `db.getUserByReferralCode(...)` y leía `user.referral_code`, pero ni la función ni la columna existían en `db.js`. Registrarse con un código daba error 500. Agregué la columna, el índice único y la generación del código (6 caracteres, sin letras que se confundan como 0/O o 1/I).
+- **Los avatares de los miembros daban 404.** Los ocho `male-0X.svg` estaban en la raíz del proyecto, pero el servidor los sirve desde `public/avatars/`. Los moví ahí.
+- **El historial de chat se quedaba congelado.** `getRoomHistory` pedía los *primeros* 80 mensajes de la sala en vez de los últimos, así que en una conversación larga nunca se veía lo reciente. Ahora trae los últimos 80 en orden.
+- **Un hash de contraseña con largo inesperado daba error 500** en vez de "contraseña incorrecta" (`crypto.timingSafeEqual` revienta si los buffers miden distinto).
+- **`node_modules/` ya no se sube al repositorio.** Estaban commiteadas 985 archivos de Express y Socket.IO que el servidor nunca usa (no aparecían en `package.json`). Agregué un `.gitignore` — las dependencias se instalan con `npm install`, que es lo que ya hace Render al desplegar.
 
 ## Nuevo: feed en cuadrícula, código de invitación, y ya no hace falta código de sala
 
@@ -77,13 +139,17 @@ Todas requieren el header `X-Admin-Key: tu-clave`. Puedes probarlas desde el nav
    ```
    cd C:\Users\guill\OneDrive\Desktop\APP\geminy-backend
    ```
-4. Arranca el servidor:
+4. Instala las dependencias (solo la primera vez):
+   ```
+   npm install
+   ```
+5. Arranca el servidor:
    ```
    node server.js
    ```
    Deberías ver: `Geminy Meet backend corriendo en http://localhost:8080`
-5. Abre `http://localhost:8080` en tu navegador. Crea una cuenta, entra a una sala.
-6. Para probarlo con **dos personas de verdad**: abre esa misma dirección desde otro dispositivo conectado a tu misma red WiFi, mais reemplazando `localhost` por la IP de tu computadora (ej. `http://192.168.1.34:8080`). Puedes ver tu IP local con `ipconfig` en PowerShell (busca "Dirección IPv4"). Entra con el mismo código de sala en ambos.
+6. Abre `http://localhost:8080` en tu navegador. Crea una cuenta, entra a una sala.
+7. Para probarlo con **dos personas de verdad**: abre esa misma dirección desde otro dispositivo conectado a tu misma red WiFi, mais reemplazando `localhost` por la IP de tu computadora (ej. `http://192.168.1.34:8080`). Puedes ver tu IP local con `ipconfig` en PowerShell (busca "Dirección IPv4"). Entra con el mismo código de sala en ambos.
 
 ## Qué ya es real vs. qué falta
 
@@ -99,6 +165,8 @@ Todas requieren el header `X-Admin-Key: tu-clave`. Puedes probarlas desde el nav
 | Perfiles (fotos, bio, edad, aperturas automáticas) | ✅ Real |
 | Traductor bajo demanda | ✅ Real (necesita tu propia clave de DeepL) |
 | Historial de chat guardado | ✅ Real |
+| Anfitrionas de inteligencia artificial (chat) | ✅ Real (necesita tu propia clave de Anthropic) |
+| Videollamada con una anfitriona de IA | ❌ No existe — no hay cámara detrás, la app no lo ofrece |
 | Compra de créditos | ⚠️ Simulada — no cobra dinero real todavía (falta conectar Apple In-App Purchase) |
 | Retiro de créditos a cuenta bancaria | ❌ No implementado (endpoint de ejemplo en `/api/wallet/withdraw` que explica lo que falta) |
 | Verificación de edad / identidad real | ❌ No implementado (solo el campo de edad autodeclarado en el perfil) |
