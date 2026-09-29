@@ -3,7 +3,6 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <!-- Política de seguridad: sin scripts remotos; los datos los trae el proceso Node. -->
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self';" />
   <title>Trading Desk</title>
   <link rel="stylesheet" href="styles.css" />
@@ -29,9 +28,24 @@
         <label for="symbol">Símbolo</label>
         <input id="symbol" type="text" placeholder="bitcoin" />
       </div>
+      <div class="field">
+        <label for="threshold">Umbral de alerta: <span id="threshold-val">60%</span></label>
+        <input id="threshold" type="range" min="50" max="90" step="1" value="60" style="width:180px" />
+      </div>
       <button id="analyze">Analizar</button>
+      <button id="save" class="ghost" title="Guardar en la watchlist">★ Guardar</button>
     </div>
     <p class="hint" id="hint"></p>
+
+    <!-- Watchlist -->
+    <div class="watchlist-bar">
+      <div class="wl-head">
+        <span class="wl-title">Watchlist</span>
+        <button id="scan" class="ghost small">Revisar watchlist</button>
+      </div>
+      <div id="wl-chips" class="wl-chips"><span class="wl-empty">Aún no has guardado ningún símbolo. Analiza uno y pulsa ★ Guardar.</span></div>
+      <div id="scan-results" class="scan-results hidden"></div>
+    </div>
 
     <div class="status" id="status"></div>
 
@@ -48,15 +62,16 @@
               <div class="pred-meta" id="pred-meta"></div>
             </div>
           </div>
+          <table class="horizons" id="horizons-table"></table>
           <div class="pred-note">
-            Es una <strong>probabilidad estadística</strong>, no una certeza. Ningún modelo
-            predice de forma fiable el mercado. Mira siempre el backtest de al lado para saber
-            si esta señal ha acertado más que el azar en el pasado.
+            Son <strong>probabilidades estadísticas</strong>, no certezas. Ningún modelo
+            predice de forma fiable el mercado. Mira la columna <em>“acierto”</em> de cada
+            horizonte: si no supera claramente el 50%, esa señal no vale más que el azar.
           </div>
         </div>
 
         <div class="card">
-          <h2>Backtest honesto (walk-forward)</h2>
+          <h2>Backtest honesto — 1 día (walk-forward)</h2>
           <div id="backtest-box"></div>
         </div>
 
@@ -74,11 +89,11 @@
 
       <div class="footer-note">
         <strong>Cómo leerlo.</strong> El modelo aprende patrones de los precios pasados y estima
-        la probabilidad de que el próximo cierre suba. El <em>backtest</em> entrena solo con el
-        pasado y comprueba, día a día, cuánto habría acertado — comparándolo con una regla tonta y
-        con "comprar y mantener". Si la ventaja es negativa o marginal, la señal no vale para decidir
-        dinero real. Esta app es una herramienta de estudio personal; <strong>no es asesoramiento
-        financiero</strong> y no incluye comisiones, impuestos ni deslizamiento.
+        la probabilidad de que el precio suba en 1, 5 o 10 días. El <em>backtest</em> entrena solo
+        con el pasado y comprueba, día a día, cuánto habría acertado — comparándolo con una regla
+        tonta y con "comprar y mantener". Si la ventaja es negativa o marginal, la señal no vale para
+        decidir dinero real. Esta app es una herramienta de estudio personal; <strong>no es
+        asesoramiento financiero</strong> y no incluye comisiones, impuestos ni deslizamiento.
       </div>
     </div>
   </main>

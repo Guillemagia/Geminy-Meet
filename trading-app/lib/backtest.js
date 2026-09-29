@@ -13,16 +13,20 @@ const model = require('./model');
 // series: { closes:number[], volumes?:number[] }
 // opts: { threshold:number (prob mínima para "apostar a subida"),
 //         minTrain:number (días mínimos antes de empezar a evaluar),
-//         retrainEvery:number (cada cuántos días reentrenar) }
+//         retrainEvery:number (cada cuántos días reentrenar),
+//         horizon:number (a cuántos días vista se predice; 1 = día siguiente) }
+// La curva de capital solo se calcula para horizon=1 (estrategia diaria sin
+// solapamiento de posiciones); para horizontes mayores se mide solo el acierto.
 function walkForward(series, opts = {}) {
   const closes = series.closes;
   const volumes = series.volumes;
   const threshold = opts.threshold ?? 0.5;
   const minTrain = opts.minTrain ?? 250;
   const retrainEvery = opts.retrainEvery ?? 20;
+  const horizon = opts.horizon ?? 1;
 
   const { X } = model.buildFeatures(closes, volumes);
-  const y = model.buildLabels(closes);
+  const y = model.buildLabels(closes, horizon);
 
   // Índices utilizables: tienen features y etiqueta.
   const usable = [];
@@ -71,12 +75,15 @@ function walkForward(series, opts = {}) {
     total++;
     if (actual === 1) { baselineCorrect++; upCount++; }
 
-    // Estrategia: si el modelo dice "sube" con prob >= threshold, nos ponemos
-    // largos ese día y capturamos el retorno real del día siguiente.
-    const nextRet = closes[i + 1] / closes[i] - 1;
-    if (predUp) equityStrategy *= 1 + nextRet;
-    equityHold *= 1 + nextRet;
-    equityCurve.push({ i, strategy: equityStrategy, hold: equityHold });
+    // Estrategia (solo para horizon=1, para evitar posiciones solapadas): si el
+    // modelo dice "sube", nos ponemos largos y capturamos el retorno del día
+    // siguiente; si no, quedamos en liquidez.
+    if (horizon === 1) {
+      const nextRet = closes[i + 1] / closes[i] - 1;
+      if (predUp) equityStrategy *= 1 + nextRet;
+      equityHold *= 1 + nextRet;
+      equityCurve.push({ i, strategy: equityStrategy, hold: equityHold });
+    }
 
     predictions.push({ index: i, prob, actual });
   }
@@ -88,6 +95,7 @@ function walkForward(series, opts = {}) {
   const majorityAcc = Math.max(baselineAcc, 1 - baselineAcc);
 
   return {
+    horizon,
     accuracy,
     baselineAlwaysUp: baselineAcc,
     baselineMajority: majorityAcc,

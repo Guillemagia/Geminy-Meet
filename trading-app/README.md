@@ -18,13 +18,19 @@ el azar.
   - `Yahoo Finance` — acciones e índices (ej. `AAPL`, `^GSPC`).
   - `CoinGecko` — cripto por su id (ej. `bitcoin`, `ethereum`). *Gratis: últimos 365 días.*
   - `Binance` — cripto en pares USDT (ej. `BTCUSDT`).
-- **Predicción**: regresión logística (JS puro) sobre 10 características técnicas
-  (retornos a 1/2/5/10 días, RSI, MACD, distancia a medias móviles, volatilidad,
-  volumen). Devuelve la probabilidad de que el próximo cierre suba.
-- **Backtest walk-forward**: entrena solo con el pasado y predice el día siguiente,
+- **Predicción a 1, 5 y 10 días**: regresión logística (JS puro) sobre 10
+  características técnicas (retornos a 1/2/5/10 días, RSI, MACD, distancia a medias
+  móviles, volatilidad, volumen). Devuelve la probabilidad de que el precio suba en
+  cada horizonte, cada una con su tasa de acierto medida.
+- **Backtest walk-forward**: entrena solo con el pasado y predice hacia delante,
   avanzando en el tiempo (sin hacer trampa con datos del futuro). Compara el acierto
   del modelo con una regla tonta y con "comprar y mantener".
+- **Watchlist**: guarda tus símbolos favoritos (se conservan entre sesiones) y
+  cárgalos con un clic. El botón "Revisar watchlist" analiza todos de golpe.
+- **Alertas**: fija un umbral de probabilidad; cuando un símbolo lo supera (al
+  analizarlo o al revisar la watchlist), salta una **notificación del sistema**.
 - **Gráficos**: velas con medias móviles (SMA 20/50) y curva de capital.
+- **Icono propio** para la app y el instalador.
 
 Todo corre **en local**: los datos se descargan de las APIs públicas, pero no se
 envía nada tuyo a ningún servidor.
@@ -75,11 +81,19 @@ trading-app/
    └─ chart.js        Gráficos en canvas (sin librerías)
 ```
 
+## Notas de uso
+
+- La **watchlist** y el **umbral de alerta** se guardan en la carpeta de datos de la
+  app (`%AppData%/Trading Desk` en Windows), así que persisten entre reinicios.
+- Las **notificaciones** usan el sistema de avisos de Windows; la primera vez puede
+  pedirte permiso para mostrar notificaciones.
+- El icono se genera con `node build/make-icon.js` (ya está incluido; solo necesitas
+  regenerarlo si quieres cambiar el diseño).
+
 ## Ideas para más adelante
 
-- Guardar una lista de seguimiento (*watchlist*) de tus símbolos favoritos.
-- Alertas cuando la probabilidad supere un umbral.
 - Más características al modelo (patrones de velas, datos macro).
-- Predicción a varios días vista, no solo al día siguiente.
+- Escaneo automático de la watchlist en segundo plano cada X minutos.
+- Exportar los resultados del backtest a CSV.
 
 Dime cuál te interesa y seguimos.

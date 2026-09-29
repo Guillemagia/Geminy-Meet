@@ -63,12 +63,12 @@ function buildFeatures(closes, volumes) {
   return { X, names };
 }
 
-// Etiqueta: 1 si el cierre del día siguiente es mayor que el de hoy, 0 si no.
-// El último día no tiene etiqueta (no sabemos el futuro).
-function buildLabels(closes) {
+// Etiqueta: 1 si el cierre dentro de `horizon` días es mayor que el de hoy, 0 si
+// no. Los últimos `horizon` días no tienen etiqueta (no sabemos el futuro).
+function buildLabels(closes, horizon = 1) {
   const y = new Array(closes.length).fill(null);
-  for (let i = 0; i < closes.length - 1; i++) {
-    y[i] = closes[i + 1] > closes[i] ? 1 : 0;
+  for (let i = 0; i < closes.length - horizon; i++) {
+    y[i] = closes[i + horizon] > closes[i] ? 1 : 0;
   }
   return y;
 }

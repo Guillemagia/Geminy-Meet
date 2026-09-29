@@ -21,9 +21,11 @@
       "main.js",
       "preload.js",
       "lib/**/*",
-      "renderer/**/*"
+      "renderer/**/*",
+      "build/icon.png"
     ],
     "win": {
+      "icon": "build/icon.ico",
       "target": [
         {
           "target": "nsis",
