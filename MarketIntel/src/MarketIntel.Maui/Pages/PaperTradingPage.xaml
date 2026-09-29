@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:MarketIntel.Maui.ViewModels"
+             xmlns:models="clr-namespace:MarketIntel.Maui.Models"
+             xmlns:loc="clr-namespace:MarketIntel.Maui.Localization"
+             x:Class="MarketIntel.Maui.Pages.PaperTradingPage"
+             x:Name="PaperRoot"
+             x:DataType="vm:PaperTradingViewModel"
+             Title="{loc:Translate Paper_Title}"
+             BackgroundColor="#0B1220">
+
+    <RefreshView IsRefreshing="{Binding IsBusy}" Command="{Binding RefreshCommand}">
+        <ScrollView>
+            <VerticalStackLayout Padding="16" Spacing="16">
+
+                <!-- Equity header -->
+                <Border BackgroundColor="#111C2E" Stroke="#1F2A3C" StrokeThickness="1" StrokeShape="RoundRectangle 14">
+                    <VerticalStackLayout Padding="16" Spacing="4">
+                        <Label Text="{loc:Translate Paper_EquityHeader}" TextColor="#64748B" FontSize="11" FontAttributes="Bold" />
+                        <Label Text="{Binding Equity, StringFormat='{0:C2}'}" TextColor="White" FontSize="30" FontAttributes="Bold" />
+                        <Label TextColor="{Binding TotalReturnPercent, Converter={StaticResource SignToColor}}" FontSize="14" FontAttributes="Bold">
+                            <Label.FormattedText>
+                                <FormattedString>
+                                    <Span Text="{Binding TotalReturnPercent, StringFormat='{0:+0.0;-0.0}%'}" />
+                                    <Span Text="{loc:Translate Paper_ReturnFrom}" />
+                                </FormattedString>
+                            </Label.FormattedText>
+                        </Label>
+                        <Label FontSize="12" TextColor="#94A3B8" Margin="0,4,0,0">
+                            <Label.FormattedText>
+                                <FormattedString>
+                                    <Span Text="{loc:Translate Paper_Realized}" />
+                                    <Span Text="{Binding Realized, StringFormat='{0:C2}'}" />
+                                    <Span Text="{loc:Translate Paper_Unrealized}" />
+                                    <Span Text="{Binding Unrealized, StringFormat='{0:C2}'}" />
+                                </FormattedString>
+                            </Label.FormattedText>
+                        </Label>
+                        <Label Text="{Binding Stats}" TextColor="#64748B" FontSize="11" />
+                    </VerticalStackLayout>
+                </Border>
+
+                <!-- Open positions -->
+                <Label Text="{loc:Translate Paper_PositionsHeader}" TextColor="#64748B" FontSize="11" FontAttributes="Bold"
+                       IsVisible="{Binding HasPositions}" />
+                <VerticalStackLayout BindableLayout.ItemsSource="{Binding Positions}" Spacing="10" IsVisible="{Binding HasPositions}">
+                    <BindableLayout.ItemTemplate>
+                        <DataTemplate x:DataType="vm:OpenPositionView">
+                            <Border BackgroundColor="#111C2E" Stroke="#1F2A3C" StrokeThickness="1" StrokeShape="RoundRectangle 12" Padding="14">
+                                <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="10">
+                                    <VerticalStackLayout Grid.Column="0" Spacing="2">
+                                        <HorizontalStackLayout Spacing="8">
+                                            <Label Text="{Binding Symbol}" TextColor="White" FontSize="17" FontAttributes="Bold" />
+                                            <Border BackgroundColor="{Binding IsLong, Converter={StaticResource LongToColor}}"
+                                                    StrokeThickness="0" StrokeShape="RoundRectangle 5" VerticalOptions="Center">
+                                                <Label Text="{Binding Side}" TextColor="White" FontSize="10" FontAttributes="Bold" Padding="7,2" />
+                                            </Border>
+                                        </HorizontalStackLayout>
+                                        <Label FontSize="11" TextColor="#64748B">
+                                            <Label.FormattedText>
+                                                <FormattedString>
+                                                    <Span Text="{loc:Translate Paper_Entry}" />
+                                                    <Span Text="{Binding EntryPrice, StringFormat='{0:0.00}'}" />
+                                                    <Span Text="{Binding CurrentPrice, StringFormat=' → {0:0.00}'}" />
+                                                    <Span Text="{Binding Shares, StringFormat='   ·   {0:0.##}'}" />
+                                                    <Span Text="{loc:Translate Paper_Units}" />
+                                                </FormattedString>
+                                            </Label.FormattedText>
+                                        </Label>
+                                    </VerticalStackLayout>
+                                    <VerticalStackLayout Grid.Column="1" Spacing="0" HorizontalOptions="End" VerticalOptions="Center">
+                                        <Label Text="{Binding Pnl, StringFormat='{0:+0.00;-0.00} $'}"
+                                               TextColor="{Binding Pnl, Converter={StaticResource SignToColor}}" FontSize="15" FontAttributes="Bold" HorizontalOptions="End" />
+                                        <Label Text="{Binding PnlPercent, StringFormat='{0:+0.0;-0.0}%'}"
+                                               TextColor="{Binding PnlPercent, Converter={StaticResource SignToColor}}" FontSize="11" HorizontalOptions="End" />
+                                    </VerticalStackLayout>
+                                    <Button Grid.Column="2" Text="{loc:Translate Paper_Close}" FontSize="12" Padding="12,0" VerticalOptions="Center"
+                                            BackgroundColor="#334155" TextColor="White"
+                                            Command="{Binding Source={x:Reference PaperRoot}, Path=BindingContext.CloseCommand}"
+                                            CommandParameter="{Binding Symbol}" />
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </BindableLayout.ItemTemplate>
+                </VerticalStackLayout>
+
+                <Label Text="{loc:Translate Paper_NoPositions}"
+                       TextColor="#64748B" FontSize="12" IsVisible="{Binding HasPositions, Converter={StaticResource InvertBool}}" />
+
+                <!-- History -->
+                <Label Text="{loc:Translate Paper_History}" TextColor="#64748B" FontSize="11" FontAttributes="Bold" IsVisible="{Binding HasHistory}" />
+                <VerticalStackLayout BindableLayout.ItemsSource="{Binding History}" Spacing="6" IsVisible="{Binding HasHistory}">
+                    <BindableLayout.ItemTemplate>
+                        <DataTemplate x:DataType="models:ClosedTrade">
+                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10" Padding="2,4">
+                                <Label Grid.Column="0" Text="{Binding Symbol}" TextColor="#CBD5E1" FontSize="13" FontAttributes="Bold" WidthRequest="60" />
+                                <Label Grid.Column="1" TextColor="#64748B" FontSize="11" VerticalOptions="Center">
+                                    <Label.FormattedText>
+                                        <FormattedString>
+                                            <Span Text="{Binding EntryPrice, StringFormat='{0:0.00}'}" />
+                                            <Span Text="{Binding ExitPrice, StringFormat=' → {0:0.00}'}" />
+                                        </FormattedString>
+                                    </Label.FormattedText>
+                                </Label>
+                                <Label Grid.Column="2" Text="{Binding Pnl, StringFormat='{0:+0.00;-0.00} $'}"
+                                       TextColor="{Binding Pnl, Converter={StaticResource SignToColor}}" FontSize="13" FontAttributes="Bold" />
+                            </Grid>
+                        </DataTemplate>
+                    </BindableLayout.ItemTemplate>
+                </VerticalStackLayout>
+
+            </VerticalStackLayout>
+        </ScrollView>
+    </RefreshView>
+</ContentPage>

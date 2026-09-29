@@ -1,0 +1,40 @@
+# Build output
+[Bb]in/
+[Oo]bj/
+[Oo]ut/
+*.user
+*.suo
+.vs/
+.idea/
+.vscode/
+
+# .NET / MAUI
+*.binlog
+project.lock.json
+artifacts/
+
+# Secrets & credentials — NEVER commit these
+# (user-secrets live outside the repo already; these are belt-and-suspenders)
+appsettings.*.local.json
+secrets.json
+*.p8
+*.p12
+*.keystore
+*.jks
+
+# Firebase — do NOT commit app credentials to a public repo.
+# Share google-services.json out-of-band, or download it again from the Firebase console.
+**/google-services.json
+# Firebase service-account (server key) must stay out of the repo entirely.
+*firebase-adminsdk*.json
+
+# Deployment secrets
+.env
+secrets/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Runtime signal-registry store (live proof-of-edge log)
+src/MarketIntel.Api/data/

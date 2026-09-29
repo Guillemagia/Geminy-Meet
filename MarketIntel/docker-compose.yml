@@ -1,0 +1,43 @@
+# MarketIntel backend stack for cloud/local scaling.
+#   1) copia .env.example a .env y rellena tus claves (Alpaca, Firebase)
+#   2) pon la service-account de Firebase en ./secrets/fcm.json
+#   3) docker compose up --build
+# El API es stateless y escalable horizontalmente; el estado vive en Postgres/TimescaleDB y Redis.
+services:
+  api:
+    build: .
+    ports:
+      - "5080:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ConnectionStrings__Postgres=Host=db;Database=marketintel;Username=marketintel;Password=changeme
+      - Redis__Configuration=redis:6379
+      # La service-account se monta como archivo (ver volumes) y se apunta aquí:
+      - Fcm__ServiceAccountPath=/run/secrets/fcm.json
+    env_file:
+      - .env            # Alpaca__*, Fcm__ProjectId  (no se sube al repo)
+    volumes:
+      - ./secrets/fcm.json:/run/secrets/fcm.json:ro   # service-account de Firebase (fuera del repo)
+    depends_on:
+      - db
+      - redis
+    restart: unless-stopped
+
+  db:
+    # TimescaleDB (Postgres) para series temporales de precios/predicciones.
+    image: timescale/timescaledb:latest-pg16
+    environment:
+      - POSTGRES_DB=marketintel
+      - POSTGRES_USER=marketintel
+      - POSTGRES_PASSWORD=changeme
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  redis:
+    # Redis para cachear señales y estado de rate-limit entre réplicas del API.
+    image: redis:7-alpine
+    restart: unless-stopped
+
+volumes:
+  pgdata:

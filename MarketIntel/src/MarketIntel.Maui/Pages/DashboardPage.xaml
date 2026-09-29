@@ -1,0 +1,341 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:MarketIntel.Maui.ViewModels"
+             xmlns:models="clr-namespace:MarketIntel.Maui.Models"
+             xmlns:contracts="clr-namespace:MarketIntel.Shared.Contracts;assembly=MarketIntel.Shared"
+             xmlns:loc="clr-namespace:MarketIntel.Maui.Localization"
+             x:Class="MarketIntel.Maui.Pages.DashboardPage"
+             x:Name="PageRoot"
+             x:DataType="vm:DashboardViewModel"
+             Title="{loc:Translate Dash_Title}"
+             BackgroundColor="#0B1220">
+
+    <RefreshView IsRefreshing="{Binding IsBusy}" Command="{Binding RefreshCommand}">
+        <ScrollView>
+            <VerticalStackLayout Padding="16" Spacing="16">
+
+                <!-- Data-source / disclaimer banner -->
+                <Border BackgroundColor="#1E293B" Stroke="#334155" StrokeThickness="1"
+                        StrokeShape="RoundRectangle 10">
+                    <VerticalStackLayout Padding="12" Spacing="2">
+                        <Label Text="{Binding BannerTitle}"
+                               TextColor="{Binding IsSynthetic, Converter={StaticResource SyntheticToColor}}"
+                               FontSize="13" FontAttributes="Bold" />
+                        <Label Text="{Binding BannerDetail}" TextColor="#94A3B8" FontSize="11" />
+                    </VerticalStackLayout>
+                </Border>
+
+                <!-- Error -->
+                <Border IsVisible="{Binding HasError}" BackgroundColor="#7F1D1D" StrokeThickness="0"
+                        StrokeShape="RoundRectangle 10">
+                    <Label Text="{Binding Error}" TextColor="White" Padding="12" FontSize="12" />
+                </Border>
+
+                <!-- Fired alerts -->
+                <Border IsVisible="{Binding HasFiredAlerts}" BackgroundColor="#3B2A06" Stroke="#D97706"
+                        StrokeThickness="1.5" StrokeShape="RoundRectangle 12">
+                    <VerticalStackLayout Padding="12" Spacing="6">
+                        <Label Text="{loc:Translate Alerts_Active}" TextColor="#FBBF24" FontSize="12" FontAttributes="Bold" />
+                        <VerticalStackLayout BindableLayout.ItemsSource="{Binding FiredAlerts}" Spacing="4">
+                            <BindableLayout.ItemTemplate>
+                                <DataTemplate x:DataType="vm:AlertHit">
+                                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                                        <Label Grid.Column="0" Text="{Binding Symbol}" TextColor="White" FontSize="13" FontAttributes="Bold" />
+                                        <Label Grid.Column="1" Text="{Binding RuleText}" TextColor="#CBD5E1" FontSize="11" VerticalOptions="Center" />
+                                        <Label Grid.Column="2" Text="{Binding Score}" TextColor="#FBBF24" FontSize="15" FontAttributes="Bold" />
+                                    </Grid>
+                                </DataTemplate>
+                            </BindableLayout.ItemTemplate>
+                        </VerticalStackLayout>
+                    </VerticalStackLayout>
+                </Border>
+
+                <!-- Market regime -->
+                <Border BackgroundColor="#111C2E" Stroke="#1F2A3C" StrokeThickness="1"
+                        StrokeShape="RoundRectangle 14">
+                    <VerticalStackLayout Padding="16" Spacing="10" BindingContext="{Binding Regime}" x:DataType="contracts:MarketRegimeDto">
+                        <Label Text="{loc:Translate Regime_Header}" TextColor="#64748B" FontSize="11" FontAttributes="Bold" />
+                        <HorizontalStackLayout Spacing="10">
+                            <Label Text="{Binding Regime}" TextColor="White" FontSize="22" FontAttributes="Bold" />
+                            <Border BackgroundColor="{Binding Risk, Converter={StaticResource RiskToColor}}"
+                                    StrokeThickness="0" StrokeShape="RoundRectangle 6" VerticalOptions="Center">
+                                <Label TextColor="White" FontSize="11" Padding="8,3">
+                                    <Label.FormattedText>
+                                        <FormattedString>
+                                            <Span Text="{loc:Translate Regime_RiskWord}" />
+                                            <Span Text=" " />
+                                            <Span Text="{Binding Risk, Converter={StaticResource RiskToText}}" />
+                                        </FormattedString>
+                                    </Label.FormattedText>
+                                </Label>
+                            </Border>
+                        </HorizontalStackLayout>
+                        <Label Text="{Binding Note}" TextColor="#94A3B8" FontSize="12" />
+
+                        <ScrollView Orientation="Horizontal" HorizontalScrollBarVisibility="Never" Margin="0,4,0,0">
+                            <HorizontalStackLayout Spacing="8" BindableLayout.ItemsSource="{Binding Indices}">
+                                <BindableLayout.ItemTemplate>
+                                    <DataTemplate x:DataType="contracts:IndexSnapshotDto">
+                                        <Border BackgroundColor="#0B1220" Stroke="#1F2A3C" StrokeThickness="1"
+                                                StrokeShape="RoundRectangle 8" Padding="10,6">
+                                            <VerticalStackLayout Spacing="1">
+                                                <Label Text="{Binding Symbol}" TextColor="White" FontSize="13" FontAttributes="Bold" />
+                                                <Label Text="{Binding BullishProbability, Converter={StaticResource ProbToPercent}}"
+                                                       TextColor="{Binding Bias, Converter={StaticResource BiasToColor}}"
+                                                       FontSize="12" FontAttributes="Bold" />
+                                            </VerticalStackLayout>
+                                        </Border>
+                                    </DataTemplate>
+                                </BindableLayout.ItemTemplate>
+                            </HorizontalStackLayout>
+                        </ScrollView>
+                    </VerticalStackLayout>
+                </Border>
+
+                <!-- Upcoming events -->
+                <Label Text="{loc:Translate Events_Header}" TextColor="#64748B" FontSize="11" FontAttributes="Bold"
+                       IsVisible="{Binding HasEvents}" />
+                <Border BackgroundColor="#111C2E" Stroke="#1F2A3C" StrokeThickness="1" StrokeShape="RoundRectangle 12"
+                        IsVisible="{Binding HasEvents}">
+                    <VerticalStackLayout Padding="12" Spacing="10" BindableLayout.ItemsSource="{Binding Events}">
+                        <BindableLayout.ItemTemplate>
+                            <DataTemplate x:DataType="contracts:EconomicEventDto">
+                                <Grid ColumnDefinitions="4,*,Auto" ColumnSpacing="10">
+                                    <BoxView Grid.Column="0" WidthRequest="4" CornerRadius="2"
+                                             Color="{Binding Importance, Converter={StaticResource ImportanceToColor}}" />
+                                    <VerticalStackLayout Grid.Column="1" Spacing="1">
+                                        <Label Text="{Binding Title}" TextColor="White" FontSize="14" FontAttributes="Bold" />
+                                        <Label Text="{Binding Detail}" TextColor="#64748B" FontSize="11" />
+                                    </VerticalStackLayout>
+                                    <Label Grid.Column="2" VerticalOptions="Center" FontSize="13" FontAttributes="Bold"
+                                           TextColor="{Binding Importance, Converter={StaticResource ImportanceToColor}}"
+                                           Text="{Binding HoursUntil, Converter={StaticResource HoursToWhen}}" />
+                                </Grid>
+                            </DataTemplate>
+                        </BindableLayout.ItemTemplate>
+                    </VerticalStackLayout>
+                </Border>
+
+                <!-- Top opportunities -->
+                <Label Text="{loc:Translate Opps_Header}" TextColor="#64748B" FontSize="11" FontAttributes="Bold" />
+                <CollectionView ItemsSource="{Binding Opportunities}" SelectionMode="Single"
+                                SelectionChanged="OnOpportunitySelected">
+                    <CollectionView.ItemTemplate>
+                        <DataTemplate x:DataType="contracts:OpportunityDto">
+                            <Border BackgroundColor="#111C2E" Stroke="#1F2A3C" StrokeThickness="1"
+                                    StrokeShape="RoundRectangle 12" Margin="0,0,0,10" Padding="14">
+                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                                    <VerticalStackLayout Grid.Column="0" Spacing="4">
+                                        <HorizontalStackLayout Spacing="8">
+                                            <Label Text="{Binding Symbol}" TextColor="White" FontSize="18" FontAttributes="Bold" />
+                                            <Border BackgroundColor="{Binding Direction, Converter={StaticResource DirectionToColor}}"
+                                                    StrokeThickness="0" StrokeShape="RoundRectangle 5" VerticalOptions="Center">
+                                                <Label Text="{Binding Direction, Converter={StaticResource DirectionToText}}"
+                                                       TextColor="White" FontSize="10" FontAttributes="Bold" Padding="7,2" />
+                                            </Border>
+                                        </HorizontalStackLayout>
+                                        <Label Text="{Binding Headline}" TextColor="#94A3B8" FontSize="12" />
+                                        <Label TextColor="#64748B" FontSize="11">
+                                            <Label.FormattedText>
+                                                <FormattedString>
+                                                    <Span Text="{loc:Translate Opp_ConfidenceLabel}" />
+                                                    <Span Text="{Binding Confidence, Converter={StaticResource ConfToText}}" />
+                                                </FormattedString>
+                                            </Label.FormattedText>
+                                        </Label>
+                                    </VerticalStackLayout>
+
+                                    <Border Grid.Column="1" WidthRequest="52" HeightRequest="52"
+                                            BackgroundColor="{Binding Score, Converter={StaticResource ScoreToColor}}"
+                                            StrokeThickness="0" StrokeShape="RoundRectangle 10" VerticalOptions="Center">
+                                        <Label Text="{Binding Score}" TextColor="White" FontSize="20" FontAttributes="Bold"
+                                               HorizontalOptions="Center" VerticalOptions="Center" />
+                                    </Border>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </CollectionView.ItemTemplate>
+                </CollectionView>
+
+                <!-- System accuracy -->
+                <Label Text="{loc:Translate Accuracy_Header}" TextColor="#64748B" FontSize="11" FontAttributes="Bold"
+                       IsVisible="{Binding HasAccuracy}" />
+                <Border BackgroundColor="#111C2E" Stroke="#1F2A3C" StrokeThickness="1" StrokeShape="RoundRectangle 12"
+                        IsVisible="{Binding HasAccuracy}">
+                    <VerticalStackLayout Padding="14" Spacing="10" BindingContext="{Binding Accuracy}" x:DataType="contracts:AccuracyDashboardDto">
+                        <Grid ColumnDefinitions="Auto,*">
+                            <Label Grid.Column="0" Text="{Binding OverallAccuracy, Converter={StaticResource ProbToPercent}}"
+                                   TextColor="{Binding OverallAccuracy, Converter={StaticResource WinRateToColor}}"
+                                   FontSize="34" FontAttributes="Bold" VerticalOptions="Center" />
+                            <VerticalStackLayout Grid.Column="1" Spacing="1" Margin="12,0,0,0" VerticalOptions="Center">
+                                <Label Text="{loc:Translate Accuracy_ModelLine}" TextColor="#94A3B8" FontSize="12" />
+                                <Label Text="{Binding TotalSample, Converter={StaticResource LocFmt}, ConverterParameter=Accuracy_SampleLine}" TextColor="#64748B" FontSize="11" />
+                            </VerticalStackLayout>
+                        </Grid>
+
+                        <Label Text="{loc:Translate Accuracy_DirLine}" TextColor="#64748B" FontSize="11" FontAttributes="Bold" Margin="0,4,0,0" />
+                        <VerticalStackLayout BindableLayout.ItemsSource="{Binding ByHorizon}" Spacing="6">
+                            <BindableLayout.ItemTemplate>
+                                <DataTemplate x:DataType="contracts:HorizonAccuracyDto">
+                                    <VerticalStackLayout Spacing="2">
+                                        <Grid ColumnDefinitions="*,Auto">
+                                            <Label Grid.Column="0" Text="{Binding Label}" TextColor="#CBD5E1" FontSize="13" />
+                                            <Label Grid.Column="1" Text="{Binding Accuracy, Converter={StaticResource ProbToPercent}}"
+                                                   TextColor="{Binding Accuracy, Converter={StaticResource WinRateToColor}}" FontSize="13" FontAttributes="Bold" />
+                                        </Grid>
+                                        <ProgressBar Progress="{Binding Accuracy}"
+                                                     ProgressColor="{Binding Accuracy, Converter={StaticResource WinRateToColor}}" />
+                                    </VerticalStackLayout>
+                                </DataTemplate>
+                            </BindableLayout.ItemTemplate>
+                        </VerticalStackLayout>
+                        <Label Text="{loc:Translate Accuracy_Disclaimer}"
+                               TextColor="#64748B" FontSize="10" />
+                    </VerticalStackLayout>
+                </Border>
+
+                <!-- Calibration (out-of-sample proof): what each grade SAYS vs what it REALLY did -->
+                <Label Text="{loc:Translate Cal_Header}" TextColor="#64748B" FontSize="11" FontAttributes="Bold"
+                       IsVisible="{Binding HasCalibration}" />
+                <Border BackgroundColor="#111C2E" Stroke="#1F2A3C" StrokeThickness="1" StrokeShape="RoundRectangle 12"
+                        IsVisible="{Binding HasCalibration}">
+                    <VerticalStackLayout Padding="14" Spacing="8" BindingContext="{Binding Calibration}" x:DataType="contracts:CalibrationReportDto">
+                        <Label Text="{Binding Method}" TextColor="#94A3B8" FontSize="12" />
+                        <Grid ColumnDefinitions="Auto,*,*,*,Auto" ColumnSpacing="8">
+                            <Label Grid.Column="0" Text="{loc:Translate Cal_ColGrade}" TextColor="#64748B" FontSize="10" FontAttributes="Bold" />
+                            <Label Grid.Column="1" Text="{loc:Translate Cal_ColSays}" TextColor="#64748B" FontSize="10" FontAttributes="Bold" HorizontalOptions="End" />
+                            <Label Grid.Column="2" Text="{loc:Translate Cal_ColReal}" TextColor="#64748B" FontSize="10" FontAttributes="Bold" HorizontalOptions="End" />
+                            <Label Grid.Column="3" Text="{loc:Translate Cal_ColTp}" TextColor="#64748B" FontSize="10" FontAttributes="Bold" HorizontalOptions="End" />
+                            <Label Grid.Column="4" Text="{loc:Translate Cal_ColN}" TextColor="#64748B" FontSize="10" FontAttributes="Bold" HorizontalOptions="End" />
+                        </Grid>
+                        <VerticalStackLayout BindableLayout.ItemsSource="{Binding Buckets}" Spacing="6">
+                            <BindableLayout.ItemTemplate>
+                                <DataTemplate x:DataType="contracts:CalibrationBucketDto">
+                                    <Grid ColumnDefinitions="Auto,*,*,*,Auto" ColumnSpacing="8">
+                                        <Border Grid.Column="0" BackgroundColor="{Binding Grade, Converter={StaticResource GradeToColor}}"
+                                                StrokeThickness="0" StrokeShape="RoundRectangle 5" WidthRequest="30" VerticalOptions="Center">
+                                            <Label Text="{Binding GradeLabel}" TextColor="White" FontSize="12" FontAttributes="Bold" Padding="0,2" HorizontalOptions="Center" />
+                                        </Border>
+                                        <Label Grid.Column="1" Text="{Binding PredictedHitRate, Converter={StaticResource ProbToPercent}}" TextColor="#94A3B8" FontSize="13" HorizontalOptions="End" VerticalOptions="Center" />
+                                        <Label Grid.Column="2" Text="{Binding RealizedHitRate, Converter={StaticResource ProbToPercent}}"
+                                               TextColor="{Binding RealizedHitRate, Converter={StaticResource WinRateToColor}}" FontSize="13" FontAttributes="Bold" HorizontalOptions="End" VerticalOptions="Center" />
+                                        <Label Grid.Column="3" Text="{Binding TpBeforeSlRate, Converter={StaticResource ProbToPercent}}" TextColor="#CBD5E1" FontSize="13" HorizontalOptions="End" VerticalOptions="Center" />
+                                        <Label Grid.Column="4" Text="{Binding Sample}" TextColor="#475569" FontSize="11" HorizontalOptions="End" VerticalOptions="Center" />
+                                    </Grid>
+                                </DataTemplate>
+                            </BindableLayout.ItemTemplate>
+                        </VerticalStackLayout>
+                        <Label Text="{Binding BrierScore, Converter={StaticResource LocFmt}, ConverterParameter=Cal_Brier}" TextColor="#94A3B8" FontSize="11" Margin="0,4,0,0" />
+                        <Label Text="{Binding Note}" TextColor="#64748B" FontSize="10" />
+                    </VerticalStackLayout>
+                </Border>
+
+                <!-- Live signal registry: forward-only real outcomes -->
+                <Label Text="{loc:Translate Reg_Header}" TextColor="#64748B" FontSize="11" FontAttributes="Bold"
+                       IsVisible="{Binding HasRegistry}" />
+                <Border BackgroundColor="#111C2E" Stroke="#1F2A3C" StrokeThickness="1" StrokeShape="RoundRectangle 12"
+                        IsVisible="{Binding HasRegistry}">
+                    <VerticalStackLayout Padding="14" Spacing="8">
+                        <Label Text="{Binding RegistrySummary}" TextColor="#CBD5E1" FontSize="14" FontAttributes="Bold" />
+                        <VerticalStackLayout BindableLayout.ItemsSource="{Binding Registry.ByGrade}" Spacing="6">
+                            <BindableLayout.ItemTemplate>
+                                <DataTemplate x:DataType="contracts:CalibrationBucketDto">
+                                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                                        <Border Grid.Column="0" BackgroundColor="{Binding Grade, Converter={StaticResource GradeToColor}}"
+                                                StrokeThickness="0" StrokeShape="RoundRectangle 5" WidthRequest="30" VerticalOptions="Center">
+                                            <Label Text="{Binding GradeLabel}" TextColor="White" FontSize="12" FontAttributes="Bold" Padding="0,2" HorizontalOptions="Center" />
+                                        </Border>
+                                        <Label Grid.Column="1" Text="{Binding TpBeforeSlRate, Converter={StaticResource ProbToPercent}}"
+                                               TextColor="{Binding TpBeforeSlRate, Converter={StaticResource WinRateToColor}}" FontSize="13" FontAttributes="Bold" VerticalOptions="Center" />
+                                        <Label Grid.Column="2" Text="{Binding Sample}" TextColor="#475569" FontSize="11" VerticalOptions="Center" />
+                                    </Grid>
+                                </DataTemplate>
+                            </BindableLayout.ItemTemplate>
+                        </VerticalStackLayout>
+                        <Label Text="{Binding Registry.Note}" TextColor="#64748B" FontSize="10" />
+                    </VerticalStackLayout>
+                </Border>
+
+                <!-- Watchlist + search -->
+                <Label Text="{loc:Translate Watchlist_Header}" TextColor="#64748B" FontSize="11" FontAttributes="Bold" />
+                <Border BackgroundColor="#111C2E" Stroke="#1F2A3C" StrokeThickness="1" StrokeShape="RoundRectangle 12">
+                    <VerticalStackLayout Padding="12" Spacing="10">
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                            <Entry Grid.Column="0" Text="{Binding NewSymbol}" Placeholder="{loc:Translate Watchlist_AddPlaceholder}"
+                                   TextColor="White" PlaceholderColor="#64748B" ReturnCommand="{Binding AddSymbolCommand}" />
+                            <Button Grid.Column="1" Text="{loc:Translate Watchlist_AddButton}" Command="{Binding AddSymbolCommand}"
+                                    BackgroundColor="#2563EB" TextColor="White" FontSize="13" Padding="14,0" />
+                        </Grid>
+
+                        <VerticalStackLayout BindableLayout.ItemsSource="{Binding Watchlist}" Spacing="8">
+                            <BindableLayout.ItemTemplate>
+                                <DataTemplate x:DataType="contracts:OpportunityDto">
+                                    <Grid ColumnDefinitions="44,*,Auto" ColumnSpacing="10">
+                                        <Border Grid.Column="0" WidthRequest="44" HeightRequest="44"
+                                                BackgroundColor="{Binding Score, Converter={StaticResource ScoreToColor}}"
+                                                StrokeThickness="0" StrokeShape="RoundRectangle 9">
+                                            <Label Text="{Binding Score}" TextColor="White" FontSize="16" FontAttributes="Bold"
+                                                   HorizontalOptions="Center" VerticalOptions="Center" />
+                                        </Border>
+                                        <VerticalStackLayout Grid.Column="1" Spacing="1" VerticalOptions="Center">
+                                            <VerticalStackLayout.GestureRecognizers>
+                                                <TapGestureRecognizer
+                                                    Command="{Binding Source={x:Reference PageRoot}, Path=BindingContext.OpenSymbolCommand}"
+                                                    CommandParameter="{Binding Symbol}" />
+                                            </VerticalStackLayout.GestureRecognizers>
+                                            <Label Text="{Binding Symbol}" TextColor="White" FontSize="16" FontAttributes="Bold" />
+                                            <Label Text="{Binding Headline}" TextColor="#64748B" FontSize="11" />
+                                        </VerticalStackLayout>
+                                        <Button Grid.Column="2" Text="✕" FontSize="14" TextColor="#94A3B8"
+                                                BackgroundColor="Transparent" WidthRequest="40"
+                                                Command="{Binding Source={x:Reference PageRoot}, Path=BindingContext.RemoveSymbolCommand}"
+                                                CommandParameter="{Binding Symbol}" />
+                                    </Grid>
+                                </DataTemplate>
+                            </BindableLayout.ItemTemplate>
+                        </VerticalStackLayout>
+                    </VerticalStackLayout>
+                </Border>
+
+                <!-- Alert rules -->
+                <Label Text="{loc:Translate Alerts_RulesHeader}" TextColor="#64748B" FontSize="11" FontAttributes="Bold" />
+                <Border BackgroundColor="#111C2E" Stroke="#1F2A3C" StrokeThickness="1" StrokeShape="RoundRectangle 12">
+                    <VerticalStackLayout Padding="12" Spacing="10">
+                        <Grid ColumnDefinitions="*,80,Auto" ColumnSpacing="8">
+                            <Entry Grid.Column="0" Text="{Binding NewAlertSymbol}" Placeholder="{loc:Translate Alerts_SymbolPlaceholder}"
+                                   TextColor="White" PlaceholderColor="#64748B" />
+                            <Entry Grid.Column="1" Text="{Binding NewAlertScore}" Placeholder="{loc:Translate Alerts_ScorePlaceholder}" Keyboard="Numeric"
+                                   TextColor="White" PlaceholderColor="#64748B" />
+                            <Button Grid.Column="2" Text="＋" Command="{Binding AddAlertCommand}"
+                                    BackgroundColor="#2563EB" TextColor="White" FontSize="16" WidthRequest="48" />
+                        </Grid>
+
+                        <VerticalStackLayout BindableLayout.ItemsSource="{Binding Rules}" Spacing="6">
+                            <BindableLayout.ItemTemplate>
+                                <DataTemplate x:DataType="models:AlertRule">
+                                    <Grid ColumnDefinitions="*,Auto">
+                                        <Label Grid.Column="0" Text="{Binding Text}" TextColor="#CBD5E1" FontSize="13" VerticalOptions="Center" />
+                                        <Button Grid.Column="1" Text="✕" FontSize="14" TextColor="#94A3B8"
+                                                BackgroundColor="Transparent" WidthRequest="40"
+                                                Command="{Binding Source={x:Reference PageRoot}, Path=BindingContext.RemoveRuleCommand}"
+                                                CommandParameter="{Binding .}" />
+                                    </Grid>
+                                </DataTemplate>
+                            </BindableLayout.ItemTemplate>
+                        </VerticalStackLayout>
+                    </VerticalStackLayout>
+                </Border>
+
+                <!-- Language selector -->
+                <Label Text="{loc:Translate Lang_Header}" TextColor="#64748B" FontSize="11" FontAttributes="Bold" />
+                <Border BackgroundColor="#111C2E" Stroke="#1F2A3C" StrokeThickness="1" StrokeShape="RoundRectangle 12">
+                    <Picker ItemsSource="{Binding Languages}"
+                            SelectedItem="{Binding SelectedLanguage, Mode=TwoWay}"
+                            TextColor="White" TitleColor="#64748B" Margin="8,0" />
+                </Border>
+
+            </VerticalStackLayout>
+        </ScrollView>
+    </RefreshView>
+</ContentPage>
