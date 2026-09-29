@@ -87,12 +87,21 @@ y la watchlist; las notificaciones push en background (Firebase/APNs) son de la 
 | GET | `/api/options/{symbol}` | Cadena de opciones: expected move, mejores contratos, actividad inusual |
 | GET | `/api/assistant/{symbol}?q=...` | Asistente que responde desde los datos del sistema |
 | GET | `/api/accuracy` | Precisión histórica del sistema por horizonte y por símbolo |
+| GET | `/api/calibration` | Calibración walk-forward: acierto real vs. predicho por grado |
+| GET | `/api/registry` | Registro vivo de señales emitidas y su resultado |
 | GET | `/api/news/{symbol}` | Noticias + análisis de sentimiento agregado |
-| GET | `/api/plan` · `/api/plans` | Plan actual / escalera de planes (según `X-Api-Key`) |
-| POST | `/api/keys?tier=pro` | Emite una API key de demo para un nivel |
 | POST | `/api/devices` · `/api/notify/test` | Registro de token push / envío de prueba |
 | GET | `/api/ready` | Sonda de readiness para orquestadores |
 | GET | `/api/candles/{symbol}?tf=H1&count=200` | Velas OHLCV |
+
+> **Build personal:** esta versión es de un solo usuario. No hay niveles de
+> suscripción, ni API keys, ni límites de uso: **todas las funciones están
+> desbloqueadas** (opciones, backtest y scanner sin restricciones). Los endpoints
+> `/api/plan`, `/api/plans` y `/api/keys` se han eliminado.
+
+`{symbol}` acepta **acciones** (`AAPL`), **ETF** (`SPY`, `QQQ`, `GLD`…) y
+**cripto** en forma sin barra (`BTCUSD`, `ETHUSD`, `SOLUSD`). El backend enruta
+la cripto al feed 24/7 de Alpaca automáticamente.
 
 ## Cómo ejecutar
 
@@ -157,10 +166,10 @@ por el ETF **VIXY**. Para reemplazar Alpaca por otro proveedor (Polygon, Finnhub
 
 ## Escalado y despliegue (V4)
 
-- **Niveles de suscripción** (`Subscriptions/`): Free / Pro / Premium / Enterprise. El nivel se
-  resuelve del header `X-Api-Key` (`ApiKeyStore`, con keys de demo `demo-free`…`demo-enterprise`).
-  Cada nivel define **rate limit**, tamaño del scanner y acceso a opciones/IA (`TierPolicy`).
-- **Rate limiting** por nivel (particionado por key) y **caché de salida** en endpoints globales.
+- **Uso personal (un solo usuario)**: se ha retirado todo el sistema de suscripciones/pago
+  (niveles, `X-Api-Key`, rate limiting y los endpoints de planes/keys). **Todas las funciones
+  están desbloqueadas**; no hay paywalls ni límites de uso.
+- **Caché de salida** en los endpoints globales (rendimiento, no restricción).
 - **Contenedorización**: `Dockerfile` (multi-stage) + `docker-compose.yml` (API stateless +
   TimescaleDB + Redis). `docker compose up --build`. El API es horizontalmente escalable.
 - **Notificaciones**:
@@ -173,13 +182,26 @@ por el ETF **VIXY**. Para reemplazar Alpaca por otro proveedor (Polygon, Finnhub
     el receptor FCM (`MarketIntelFirebaseMessagingService`, tras el flag `-p:UseFirebase=true`).
     **Guía completa paso a paso: [`docs/FIREBASE_SETUP.md`](docs/FIREBASE_SETUP.md)** (crear el
     proyecto, `google-services.json`, service-account). iOS añade APNs y requiere Mac.
-- La app MAUI se autentica con una key de demo (`demo-pro`) y muestra la escalera de planes.
+
+## Clases de activo
+
+El motor trabaja sobre velas OHLCV, así que es **agnóstico al activo**. Cubre:
+
+- **Acciones** (`AAPL`, `NVDA`, `TSLA`…) — feed de acciones de Alpaca.
+- **ETF** (`SPY`, `QQQ`, `GLD`, `TLT`, `SMH`…) — mismo feed que las acciones.
+- **Cripto** (`BTCUSD`, `ETHUSD`, `SOLUSD`…) — feed de cripto 24/7 de Alpaca. Se usa la forma
+  **sin barra** en toda la app y se convierte a `BTC/USD` solo al llamar a Alpaca (`AssetClass`).
+
+`AssetClass` clasifica cada símbolo (acción/ETF/cripto), normaliza la cripto y define el universo
+del scanner. Las ETF y la cripto no generan "earnings" (no hay riesgo de resultados empresariales).
+**Futuros**: pendientes — requieren un proveedor de datos aparte (de pago).
 
 ## Hoja de ruta
 
-- **V1 (actual)** — datos, indicadores, señal probabilística transparente, riesgo, scanner,
-  régimen de mercado, dashboard + detalle en la app. Datos sintéticos.
+- **V1** — datos, indicadores, señal probabilística transparente, riesgo, scanner,
+  régimen de mercado, dashboard + detalle en la app.
 - **V2 — IA** — proveedor de datos real, sentimiento de noticias (NLP), ensemble ML (ONNX),
   confianza calibrada.
 - **V3 — Profesional** — opciones y actividad inusual, backtesting, paper trading, alertas.
-- **V4 — Escala** — arquitectura cloud, suscripciones, notificaciones push, API pública.
+- **Personal (actual)** — build de un solo usuario: sin suscripciones ni paywalls, todo
+  desbloqueado; acciones + ETF + cripto; idiomas inglés y español.
