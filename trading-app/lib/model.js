@@ -10,23 +10,34 @@
 
 const ind = require('./indicators');
 
-// A partir de las series de precios de cierre (y volumen opcional), construye
-// la matriz de características por cada día. Devuelve { X, names } donde X[i] es
-// el vector de features del día i (o null si aún no hay datos suficientes).
-function buildFeatures(closes, volumes) {
-  const n = closes.length;
+// A partir de las velas OHLCV construye la matriz de características por día.
+// `candles` es [{ date, open, high, low, close, volume }]. Devuelve { X, names }
+// donde X[i] es el vector de features del día i (o null si aún no hay datos
+// suficientes). Las señales derivadas de velas (mechas, cuerpo, huecos) se anulan
+// con elegancia cuando la fuente solo trae cierre (ej. CoinGecko: open=high=low=close).
+function buildFeatures(candles) {
+  const n = candles.length;
+  const closes = candles.map((c) => c.close);
+  const volumes = candles.map((c) => c.volume || 0);
+
   const ret = ind.returns(closes);
   const rsi14 = ind.rsi(closes, 14);
   const { hist } = ind.macd(closes);
   const sma20 = ind.sma(closes, 20);
   const sma50 = ind.sma(closes, 50);
+  const sma100 = ind.sma(closes, 100);
   const vol10 = ind.rollingStd(ret.map((r) => (r === null ? 0 : r)), 10);
-  const volSma20 = volumes ? ind.sma(volumes, 20) : null;
+  const volSma20 = ind.sma(volumes, 20);
 
   const names = [
+    // Precio / momento
     'ret_1', 'ret_2', 'ret_5', 'ret_10',
     'rsi_14', 'macd_hist', 'dist_sma20', 'dist_sma50',
     'volatility_10', 'volume_ratio',
+    // Velas (OHLC)
+    'body_ratio', 'upper_wick', 'lower_wick', 'close_pos', 'gap', 'range_rel',
+    // Tendencia larga y estacionalidad
+    'dist_sma100', 'dow_sin', 'dow_cos',
   ];
 
   const X = new Array(n).fill(null);
@@ -40,27 +51,49 @@ function buildFeatures(closes, volumes) {
     ) {
       continue;
     }
+    const c = candles[i];
     const ret2 = closes[i - 2] ? closes[i] / closes[i - 2] - 1 : 0;
     const ret5 = closes[i - 5] ? closes[i] / closes[i - 5] - 1 : 0;
     const ret10 = closes[i - 10] ? closes[i] / closes[i - 10] - 1 : 0;
-    let volumeRatio = 0;
-    if (volumes && volSma20 && volSma20[i]) {
-      volumeRatio = volumes[i] / volSma20[i] - 1;
-    }
+    const volumeRatio = volSma20[i] ? volumes[i] / volSma20[i] - 1 : 0;
+
+    // Señales de vela (se anulan si no hay rango real de precio en el día).
+    const range = c.high - c.low;
+    const body = c.close - c.open;
+    const bodyRatio = range > 0 ? body / range : 0;
+    const upperWick = range > 0 ? (c.high - Math.max(c.open, c.close)) / range : 0;
+    const lowerWick = range > 0 ? (Math.min(c.open, c.close) - c.low) / range : 0;
+    const closePos = range > 0 ? (c.close - c.low) / range : 0.5;
+    const prevClose = closes[i - 1];
+    const gap = prevClose ? c.open / prevClose - 1 : 0;
+    const rangeRel = c.close ? range / c.close : 0;
+
+    // Tendencia larga (0 si aún no hay SMA100).
+    const distSma100 = sma100[i] ? (c.close - sma100[i]) / sma100[i] : 0;
+
+    // Estacionalidad por día de la semana, codificada en seno/coseno.
+    const dow = dayOfWeek(c.date);
+    const dowSin = Math.sin((2 * Math.PI * dow) / 7);
+    const dowCos = Math.cos((2 * Math.PI * dow) / 7);
+
     X[i] = [
-      ret[i],
-      ret2,
-      ret5,
-      ret10,
-      (rsi14[i] - 50) / 50, // centrado alrededor de 0
-      hist[i] / closes[i], // normalizado por precio
+      ret[i], ret2, ret5, ret10,
+      (rsi14[i] - 50) / 50,
+      hist[i] / closes[i],
       (closes[i] - sma20[i]) / sma20[i],
       (closes[i] - sma50[i]) / sma50[i],
-      vol10[i],
-      volumeRatio,
+      vol10[i], volumeRatio,
+      bodyRatio, upperWick, lowerWick, closePos, gap, rangeRel,
+      distSma100, dowSin, dowCos,
     ];
   }
   return { X, names };
+}
+
+function dayOfWeek(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00Z');
+  const v = d.getUTCDay();
+  return Number.isNaN(v) ? 0 : v;
 }
 
 // Etiqueta: 1 si el cierre dentro de `horizon` días es mayor que el de hoy, 0 si

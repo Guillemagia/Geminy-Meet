@@ -18,17 +18,25 @@ el azar.
   - `Yahoo Finance` — acciones e índices (ej. `AAPL`, `^GSPC`).
   - `CoinGecko` — cripto por su id (ej. `bitcoin`, `ethereum`). *Gratis: últimos 365 días.*
   - `Binance` — cripto en pares USDT (ej. `BTCUSDT`).
-- **Predicción a 1, 5 y 10 días**: regresión logística (JS puro) sobre 10
-  características técnicas (retornos a 1/2/5/10 días, RSI, MACD, distancia a medias
-  móviles, volatilidad, volumen). Devuelve la probabilidad de que el precio suba en
-  cada horizonte, cada una con su tasa de acierto medida.
+- **Predicción a 1, 5 y 10 días**: regresión logística (JS puro) sobre 19
+  características: momento (retornos a 1/2/5/10 días, RSI, MACD, distancia a medias
+  móviles, volatilidad, volumen), **señales de vela** (tamaño de cuerpo, mechas,
+  hueco de apertura, posición del cierre en el rango) y **tendencia larga +
+  estacionalidad** (distancia a la SMA100, día de la semana). Devuelve la
+  probabilidad de subida en cada horizonte, cada una con su tasa de acierto medida.
 - **Backtest walk-forward**: entrena solo con el pasado y predice hacia delante,
   avanzando en el tiempo (sin hacer trampa con datos del futuro). Compara el acierto
   del modelo con una regla tonta y con "comprar y mantener".
+- **Exportar a CSV**: guarda el backtest día a día (fecha, cierre, probabilidad,
+  predicción, resultado real, curva de capital) para analizarlo en Excel.
 - **Watchlist**: guarda tus símbolos favoritos (se conservan entre sesiones) y
   cárgalos con un clic. El botón "Revisar watchlist" analiza todos de golpe.
 - **Alertas**: fija un umbral de probabilidad; cuando un símbolo lo supera (al
   analizarlo o al revisar la watchlist), salta una **notificación del sistema**.
+- **Escaneo automático en segundo plano**: elige un intervalo (5/15/30/60 min) y la
+  app revisa tu watchlist sola y te avisa. Con el escaneo activo, cerrar la ventana
+  la envía a la **bandeja del sistema** (icono junto al reloj) y sigue vigilando;
+  desde ahí puedes abrirla, revisar al instante o salir.
 - **Gráficos**: velas con medias móviles (SMA 20/50) y curva de capital.
 - **Icono propio** para la app y el instalador.
 
@@ -92,8 +100,9 @@ trading-app/
 
 ## Ideas para más adelante
 
-- Más características al modelo (patrones de velas, datos macro).
-- Escaneo automático de la watchlist en segundo plano cada X minutos.
-- Exportar los resultados del backtest a CSV.
+- Señales macro externas (VIX, tipos de interés, índice del dólar) cruzando varias
+  fuentes por fecha.
+- Comparar varios modelos y elegir el mejor por horizonte automáticamente.
+- Panel de histórico de alertas.
 
 Dime cuál te interesa y seguimos.

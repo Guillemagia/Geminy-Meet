@@ -75,7 +75,8 @@ async function fetchYahoo(symbol, range = '5y') {
 
 // --- CoinGecko (cripto) ------------------------------------------------------
 // Devuelve cierres y volúmenes diarios. `symbol` es el id de CoinGecko.
-async function fetchCoinGecko(symbol, days = 'max') {
+// El plan gratis limita a 365 días de histórico (más devuelve error 401).
+async function fetchCoinGecko(symbol, days = 365) {
   const id = symbol.trim().toLowerCase();
   const url = `https://api.coingecko.com/api/v3/coins/${encodeURIComponent(id)}/market_chart?vs_currency=usd&days=${days}&interval=daily`;
   const data = await getJson(url);
@@ -110,7 +111,7 @@ async function fetchHistory({ provider, symbol, range, days }) {
   switch (provider) {
     case 'stooq': return fetchStooq(symbol);
     case 'yahoo': return fetchYahoo(symbol, range || '5y');
-    case 'coingecko': return fetchCoinGecko(symbol, days || 'max');
+    case 'coingecko': return fetchCoinGecko(symbol, days || 365);
     case 'binance': return fetchBinance(symbol, '1d', 1000);
     default: throw new Error(`Fuente desconocida: ${provider}`);
   }

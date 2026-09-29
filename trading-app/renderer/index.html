@@ -30,7 +30,17 @@
       </div>
       <div class="field">
         <label for="threshold">Umbral de alerta: <span id="threshold-val">60%</span></label>
-        <input id="threshold" type="range" min="50" max="90" step="1" value="60" style="width:180px" />
+        <input id="threshold" type="range" min="50" max="90" step="1" value="60" style="width:170px" />
+      </div>
+      <div class="field">
+        <label for="scan-interval">Escaneo automático</label>
+        <select id="scan-interval">
+          <option value="0">Desactivado</option>
+          <option value="5">Cada 5 min</option>
+          <option value="15">Cada 15 min</option>
+          <option value="30">Cada 30 min</option>
+          <option value="60">Cada 60 min</option>
+        </select>
       </div>
       <button id="analyze">Analizar</button>
       <button id="save" class="ghost" title="Guardar en la watchlist">★ Guardar</button>
@@ -40,7 +50,7 @@
     <!-- Watchlist -->
     <div class="watchlist-bar">
       <div class="wl-head">
-        <span class="wl-title">Watchlist</span>
+        <span class="wl-title">Watchlist <span id="scan-auto-note" class="muted"></span></span>
         <button id="scan" class="ghost small">Revisar watchlist</button>
       </div>
       <div id="wl-chips" class="wl-chips"><span class="wl-empty">Aún no has guardado ningún símbolo. Analiza uno y pulsa ★ Guardar.</span></div>

@@ -10,7 +10,7 @@
 
 const model = require('./model');
 
-// series: { closes:number[], volumes?:number[] }
+// series: { candles:{open,high,low,close,volume,date}[], closes:number[], volumes?:number[] }
 // opts: { threshold:number (prob mínima para "apostar a subida"),
 //         minTrain:number (días mínimos antes de empezar a evaluar),
 //         retrainEvery:number (cada cuántos días reentrenar),
@@ -19,13 +19,13 @@ const model = require('./model');
 // solapamiento de posiciones); para horizontes mayores se mide solo el acierto.
 function walkForward(series, opts = {}) {
   const closes = series.closes;
-  const volumes = series.volumes;
+  const candles = series.candles;
   const threshold = opts.threshold ?? 0.5;
   const minTrain = opts.minTrain ?? 250;
   const retrainEvery = opts.retrainEvery ?? 20;
   const horizon = opts.horizon ?? 1;
 
-  const { X } = model.buildFeatures(closes, volumes);
+  const { X } = model.buildFeatures(candles);
   const y = model.buildLabels(closes, horizon);
 
   // Índices utilizables: tienen features y etiqueta.

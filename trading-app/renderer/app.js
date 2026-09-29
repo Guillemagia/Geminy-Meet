@@ -25,10 +25,18 @@ async function init() {
   try {
     const s = await window.api.settingsGet();
     threshold = s.threshold ?? 0.6;
+    $('scan-interval').value = String(s.scanIntervalMin ?? 0);
   } catch {}
   $('threshold').value = Math.round(threshold * 100);
   $('threshold-val').textContent = Math.round(threshold * 100) + '%';
   await refreshWatchlist();
+
+  // Recibe los resultados de los escaneos automáticos del proceso principal.
+  window.api.onScanUpdate((payload) => {
+    renderScan(payload.results, payload.threshold);
+    const t = new Date(payload.at || Date.now());
+    $('scan-auto-note').textContent = `· última revisión automática ${t.toLocaleTimeString('es-ES')}`;
+  });
 }
 
 $('provider').addEventListener('change', updateHint);
@@ -44,6 +52,14 @@ $('threshold').addEventListener('input', () => {
 });
 $('threshold').addEventListener('change', () => {
   window.api.settingsSet({ threshold });
+});
+
+$('scan-interval').addEventListener('change', async () => {
+  const scanIntervalMin = +$('scan-interval').value;
+  await window.api.settingsSet({ scanIntervalMin });
+  $('scan-auto-note').textContent = scanIntervalMin > 0
+    ? `· escaneo automático cada ${scanIntervalMin} min`
+    : '';
 });
 
 // --- Análisis principal ---
@@ -146,8 +162,11 @@ function render(d) {
         <span><i class="dot" style="background:${window.Charts.COLORS.hold}"></i> Comprar y mantener</span>
       </div>
       <canvas id="equity-chart"></canvas>
-      <p class="pred-note">${interpretEdge(edge)}</p>`;
+      <p class="pred-note">${interpretEdge(edge)}</p>
+      <button id="export-csv" class="ghost small">⬇ Exportar backtest a CSV</button>`;
     window.Charts.drawEquity($('equity-chart'), bt.equityCurve);
+    const btn = document.getElementById('export-csv');
+    if (btn) btn.addEventListener('click', exportCsv);
   }
 }
 
@@ -204,31 +223,75 @@ async function scanWatchlist() {
   box.innerHTML = '<span class="muted">Revisando watchlist…</span>';
   try {
     const { threshold: th, results } = await window.api.scanWatchlist();
-    if (!results.length) { box.innerHTML = '<span class="muted">Watchlist vacía.</span>'; return; }
-    const alerts = results.filter((r) => r.alert);
-    box.innerHTML = '<div class="scan-title">Resultado del escaneo (prob. a 1 día):</div>' +
-      results.map((r) => {
-        if (r.error) return `<div class="scan-row"><b>${r.symbol.toUpperCase()}</b> <span class="muted">${r.error}</span></div>`;
-        const p = r.probUp == null ? null : r.probUp;
-        const pct = p == null ? '—' : (p * 100).toFixed(0) + '%';
-        const dir = p == null ? '' : p >= 0.5 ? '▲' : '▼';
-        const cls = p == null ? '' : p >= 0.5 ? 'pos' : 'neg';
-        const flag = r.alert ? '<span class="alert-flag">⚠ alerta</span>' : '';
-        return `<div class="scan-row ${r.alert ? 'is-alert' : ''}"><b>${r.symbol.toUpperCase()}</b> <span class="chip-src">${r.provider}</span> <span class="${cls}">${dir} ${pct}</span> ${flag}</div>`;
-      }).join('');
-    // Notificar las alertas
-    for (const a of alerts) {
-      const p = a.probUp;
-      const up = p >= 0.5;
-      window.api.notify(
-        `${up ? '▲' : '▼'} ${a.symbol.toUpperCase()}: ${((up ? p : 1 - p) * 100).toFixed(0)}% prob. de ${up ? 'subir' : 'bajar'}`,
-        `Watchlist · umbral ${Math.round(th * 100)}%`
-      );
-    }
+    renderScan(results, th);
+    for (const a of results.filter((r) => r.alert)) notifyScanAlert(a, th);
   } catch (err) {
     box.innerHTML = `<span class="muted">Error: ${err.message}</span>`;
   } finally {
     $('scan').disabled = false;
+  }
+}
+
+// Pinta la tabla de resultados del escaneo (compartida por el manual y el automático).
+function renderScan(results, th) {
+  const box = $('scan-results');
+  box.classList.remove('hidden');
+  if (!results || !results.length) { box.innerHTML = '<span class="muted">Watchlist vacía.</span>'; return; }
+  box.innerHTML = '<div class="scan-title">Resultado del escaneo (prob. a 1 día):</div>' +
+    results.map((r) => {
+      if (r.error) return `<div class="scan-row"><b>${r.symbol.toUpperCase()}</b> <span class="muted">${r.error}</span></div>`;
+      const p = r.probUp;
+      const pct = p == null ? '—' : (p * 100).toFixed(0) + '%';
+      const dir = p == null ? '' : p >= 0.5 ? '▲' : '▼';
+      const cls = p == null ? '' : p >= 0.5 ? 'pos' : 'neg';
+      const flag = r.alert ? '<span class="alert-flag">⚠ alerta</span>' : '';
+      return `<div class="scan-row ${r.alert ? 'is-alert' : ''}"><b>${r.symbol.toUpperCase()}</b> <span class="chip-src">${r.provider}</span> <span class="${cls}">${dir} ${pct}</span> ${flag}</div>`;
+    }).join('');
+}
+
+function notifyScanAlert(a, th) {
+  const p = a.probUp;
+  if (p == null) return;
+  const up = p >= 0.5;
+  window.api.notify(
+    `${up ? '▲' : '▼'} ${a.symbol.toUpperCase()}: ${((up ? p : 1 - p) * 100).toFixed(0)}% prob. de ${up ? 'subir' : 'bajar'}`,
+    `Watchlist · umbral ${Math.round(th * 100)}%`
+  );
+}
+
+// --- Exportar backtest a CSV ---
+function buildBacktestCsv(d) {
+  const bt = d && d.backtest;
+  if (!bt || bt.error || !bt.predictions || !bt.predictions.length) return null;
+  const eqByIndex = new Map(bt.equityCurve.map((p) => [p.i, p]));
+  const lines = ['date,close,prob_up,pred_up,actual_up,equity_strategy,equity_hold'];
+  for (const pr of bt.predictions) {
+    const c = d.candles[pr.index];
+    const eq = eqByIndex.get(pr.index);
+    lines.push([
+      c ? c.date : '',
+      c ? c.close : '',
+      pr.prob.toFixed(6),
+      pr.prob >= 0.5 ? 1 : 0,
+      pr.actual,
+      eq ? eq.strategy.toFixed(6) : '',
+      eq ? eq.hold.toFixed(6) : '',
+    ].join(','));
+  }
+  return lines.join('\n');
+}
+
+async function exportCsv() {
+  const d = window.__last;
+  const csv = buildBacktestCsv(d);
+  if (!csv) { setStatus('No hay datos de backtest para exportar.', 'err'); return; }
+  const fname = `${d.symbol}_${d.provider}_backtest_1d.csv`.replace(/[^\w.-]/g, '_');
+  try {
+    const res = await window.api.saveCsv(fname, csv);
+    if (res.ok) setStatus('CSV guardado en: ' + res.path);
+    else if (!res.canceled) setStatus('Error al guardar: ' + (res.error || ''), 'err');
+  } catch (err) {
+    setStatus('Error al guardar: ' + err.message, 'err');
   }
 }
 

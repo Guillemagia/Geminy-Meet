@@ -17,4 +17,9 @@ contextBridge.exposeInMainWorld('api', {
   settingsSet: (patch) => ipcRenderer.invoke('settings:set', patch),
   // Notificaciones nativas
   notify: (title, body) => ipcRenderer.invoke('notify', { title, body }),
+  // Exportar CSV
+  saveCsv: (filename, content) => ipcRenderer.invoke('save-csv', { filename, content }),
+  // Escaneo automático: dispararlo y recibir sus resultados
+  scanNow: () => ipcRenderer.invoke('scan-now'),
+  onScanUpdate: (cb) => ipcRenderer.on('scan-update', (_e, payload) => cb(payload)),
 });
