@@ -36,5 +36,7 @@ secrets/
 Thumbs.db
 .DS_Store
 
-# Runtime signal-registry store (live proof-of-edge log)
+# Runtime signal-registry store (live proof-of-edge log) — wherever the API's
+# working directory lands (project dir in dev, repo root when run from there).
 src/MarketIntel.Api/data/
+/data/

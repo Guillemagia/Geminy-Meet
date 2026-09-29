@@ -13,19 +13,20 @@ public sealed class MockMarketDataProvider : IMarketDataProvider
     public bool IsSynthetic => true;
 
     // Symbol -> starting price and character. Benchmarks are included so the market-regime
-    // engine has SPY/QQQ/IWM/DIA/VIX to look at.
+    // engine has SPY/QQQ/IWM/DIA/VIX to look at, plus ETFs and crypto for those asset classes.
     private static readonly IReadOnlyDictionary<string, decimal> BasePrices = new Dictionary<string, decimal>
     {
         ["NVDA"] = 178m, ["TSLA"] = 245m, ["AAPL"] = 228m, ["AMD"] = 168m, ["META"] = 592m,
         ["MSFT"] = 431m, ["GOOGL"] = 178m, ["AMZN"] = 201m, ["NFLX"] = 705m, ["AVGO"] = 172m,
         ["SPY"] = 574m, ["QQQ"] = 502m, ["IWM"] = 221m, ["DIA"] = 431m, ["VIX"] = 15.4m,
+        ["GLD"] = 245m, ["TLT"] = 92m, ["XLK"] = 231m, ["XLE"] = 92m, ["SMH"] = 245m, ["ARKK"] = 62m,
+        // Crypto (slash-free canonical form)
+        ["BTCUSD"] = 96000m, ["ETHUSD"] = 3400m, ["SOLUSD"] = 195m,
+        ["DOGEUSD"] = 0.38m, ["AVAXUSD"] = 38m, ["LINKUSD"] = 22m,
     };
 
-    private static readonly string[] Universe =
-        ["NVDA", "TSLA", "AAPL", "AMD", "META", "MSFT", "GOOGL", "AMZN", "NFLX", "AVGO"];
-
     public Task<IReadOnlyList<string>> GetUniverseAsync(CancellationToken ct = default)
-        => Task.FromResult<IReadOnlyList<string>>(Universe);
+        => Task.FromResult(AssetClass.DefaultUniverse);
 
     public Task<decimal> GetLastPriceAsync(string symbol, CancellationToken ct = default)
     {

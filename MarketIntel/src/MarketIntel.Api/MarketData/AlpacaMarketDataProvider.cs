@@ -29,16 +29,17 @@ public sealed class AlpacaMarketDataProvider : IMarketDataProvider
     public string Name => $"Alpaca ({_options.Feed})";
     public bool IsSynthetic => false;
 
-    // Same universe as the mock for now. A production scanner would pull this from a screener.
-    private static readonly string[] Universe =
-        ["NVDA", "TSLA", "AAPL", "AMD", "META", "MSFT", "GOOGL", "AMZN", "NFLX", "AVGO"];
-
+    // A spread of equities, ETFs and crypto. A production scanner would pull this from a screener.
     public Task<IReadOnlyList<string>> GetUniverseAsync(CancellationToken ct = default)
-        => Task.FromResult<IReadOnlyList<string>>(Universe);
+        => Task.FromResult(AssetClass.DefaultUniverse);
 
     public async Task<IReadOnlyList<CandleDto>> GetCandlesAsync(
         string symbol, Timeframe timeframe, int count, CancellationToken ct = default)
     {
+        // Crypto lives on a different Alpaca API (24/7, no feed, pair symbology).
+        if (AssetClass.IsCrypto(symbol))
+            return await GetCryptoCandlesAsync(symbol, timeframe, count, ct);
+
         string sym = MapSymbol(symbol);
         string tf = ToAlpacaTimeframe(timeframe);
 
@@ -60,15 +61,7 @@ public sealed class AlpacaMarketDataProvider : IMarketDataProvider
         if (doc.RootElement.TryGetProperty("bars", out var bars) && bars.ValueKind == JsonValueKind.Array)
         {
             foreach (var b in bars.EnumerateArray())
-            {
-                result.Add(new CandleDto(
-                    TimeUtc: DateTimeOffset.Parse(b.GetProperty("t").GetString()!, CultureInfo.InvariantCulture).UtcDateTime,
-                    Open: b.GetProperty("o").GetDecimal(),
-                    High: b.GetProperty("h").GetDecimal(),
-                    Low: b.GetProperty("l").GetDecimal(),
-                    Close: b.GetProperty("c").GetDecimal(),
-                    Volume: b.GetProperty("v").GetDecimal()));
-            }
+                result.Add(ParseBar(b));
         }
 
         // We requested newest-first; the engines expect oldest-first.
@@ -76,19 +69,72 @@ public sealed class AlpacaMarketDataProvider : IMarketDataProvider
         return result;
     }
 
+    /// <summary>Crypto bars via Alpaca's v1beta3 crypto API. Response is keyed by the pair symbol.</summary>
+    private async Task<IReadOnlyList<CandleDto>> GetCryptoCandlesAsync(
+        string symbol, Timeframe timeframe, int count, CancellationToken ct)
+    {
+        string pair = AssetClass.CryptoPair(symbol); // e.g. BTC/USD
+        string tf = ToAlpacaTimeframe(timeframe);
+        // Crypto trades 24/7, so a small buffer is enough to cover the requested window.
+        DateTime start = DateTime.UtcNow - timeframe.ToTimeSpan() * count * 2;
+        string startStr = start.ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture);
+
+        string url = $"/v1beta3/crypto/us/bars?symbols={Uri.EscapeDataString(pair)}" +
+                     $"&timeframe={tf}&limit={count}&sort=desc&start={startStr}";
+
+        using var resp = await _http.GetAsync(url, ct);
+        resp.EnsureSuccessStatusCode();
+        await using var stream = await resp.Content.ReadAsStreamAsync(ct);
+        using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
+
+        var result = new List<CandleDto>(count);
+        if (doc.RootElement.TryGetProperty("bars", out var barsObj) && barsObj.ValueKind == JsonValueKind.Object
+            && barsObj.TryGetProperty(pair, out var arr) && arr.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var b in arr.EnumerateArray())
+                result.Add(ParseBar(b));
+        }
+
+        result.Reverse(); // newest-first -> oldest-first
+        return result;
+    }
+
+    private static CandleDto ParseBar(JsonElement b) => new(
+        TimeUtc: DateTimeOffset.Parse(b.GetProperty("t").GetString()!, CultureInfo.InvariantCulture).UtcDateTime,
+        Open: b.GetProperty("o").GetDecimal(),
+        High: b.GetProperty("h").GetDecimal(),
+        Low: b.GetProperty("l").GetDecimal(),
+        Close: b.GetProperty("c").GetDecimal(),
+        Volume: b.GetProperty("v").GetDecimal());
+
     public async Task<decimal> GetLastPriceAsync(string symbol, CancellationToken ct = default)
     {
-        string sym = MapSymbol(symbol);
-        string url = $"/v2/stocks/{Uri.EscapeDataString(sym)}/trades/latest?feed={_options.Feed}";
         try
         {
-            using var resp = await _http.GetAsync(url, ct);
-            resp.EnsureSuccessStatusCode();
-            await using var stream = await resp.Content.ReadAsStreamAsync(ct);
-            using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
-            if (doc.RootElement.TryGetProperty("trade", out var trade) &&
-                trade.TryGetProperty("p", out var p))
-                return p.GetDecimal();
+            if (AssetClass.IsCrypto(symbol))
+            {
+                string pair = AssetClass.CryptoPair(symbol);
+                string curl = $"/v1beta3/crypto/us/latest/trades?symbols={Uri.EscapeDataString(pair)}";
+                using var cresp = await _http.GetAsync(curl, ct);
+                cresp.EnsureSuccessStatusCode();
+                await using var cstream = await cresp.Content.ReadAsStreamAsync(ct);
+                using var cdoc = await JsonDocument.ParseAsync(cstream, cancellationToken: ct);
+                if (cdoc.RootElement.TryGetProperty("trades", out var trades)
+                    && trades.TryGetProperty(pair, out var t) && t.TryGetProperty("p", out var cp))
+                    return cp.GetDecimal();
+            }
+            else
+            {
+                string sym = MapSymbol(symbol);
+                string url = $"/v2/stocks/{Uri.EscapeDataString(sym)}/trades/latest?feed={_options.Feed}";
+                using var resp = await _http.GetAsync(url, ct);
+                resp.EnsureSuccessStatusCode();
+                await using var stream = await resp.Content.ReadAsStreamAsync(ct);
+                using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
+                if (doc.RootElement.TryGetProperty("trade", out var trade) &&
+                    trade.TryGetProperty("p", out var p))
+                    return p.GetDecimal();
+            }
         }
         catch
         {

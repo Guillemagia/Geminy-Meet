@@ -1,4 +1,5 @@
 using MarketIntel.Api.Localization;
+using MarketIntel.Api.MarketData;
 using MarketIntel.Shared.Contracts;
 using MarketIntel.Shared.Enums;
 
@@ -33,6 +34,9 @@ public sealed class MockEventCalendar : IEventCalendar
         string symbol, DateTime fromUtc, CancellationToken ct = default)
     {
         symbol = symbol.ToUpperInvariant();
+        // ETFs and crypto have no company earnings.
+        if (!AssetClass.HasEarnings(symbol)) return Task.FromResult<EconomicEventDto?>(null);
+
         // Quarterly cycle (~91 days) with a per-symbol phase so reports are spread out.
         int phase = StableHash(symbol) % 91;
         var lastBeforePhase = fromUtc.Date.AddDays(-phase);
