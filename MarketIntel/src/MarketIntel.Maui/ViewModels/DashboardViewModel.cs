@@ -178,7 +178,8 @@ public sealed class DashboardViewModel : ObservableObject
     public async Task AddSymbolAsync()
     {
         var sym = NewSymbol.Trim().ToUpperInvariant();
-        if (sym.Length is 0 or > 6) return;
+        // Up to 12 chars so crypto (e.g. AVAXUSD, LINKUSD) can be added, not just short tickers.
+        if (sym.Length is 0 or > 12) return;
         var symbols = _store.GetSymbols();
         if (!symbols.Contains(sym)) symbols.Insert(0, sym);
         _store.SaveSymbols(symbols);

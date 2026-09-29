@@ -9,7 +9,8 @@ public sealed class WatchlistStore
     private const string WatchlistKey = "watchlist.symbols";
     private const string RulesKey = "watchlist.rules";
 
-    private static readonly string[] DefaultWatchlist = ["NVDA", "TSLA", "AAPL"];
+    // A mix out of the box: equities, an ETF and a crypto (slash-free canonical form).
+    private static readonly string[] DefaultWatchlist = ["NVDA", "AAPL", "SPY", "BTCUSD", "ETHUSD"];
 
     public List<string> GetSymbols()
         => Load<List<string>>(WatchlistKey) ?? [.. DefaultWatchlist];
@@ -18,7 +19,8 @@ public sealed class WatchlistStore
     {
         var clean = symbols
             .Select(s => s.Trim().ToUpperInvariant())
-            .Where(s => s.Length is > 0 and <= 6)
+            // Allow up to 12 chars so crypto symbols (e.g. AVAXUSD, LINKUSD) are not dropped.
+            .Where(s => s.Length is > 0 and <= 12)
             .Distinct()
             .ToList();
         Save(WatchlistKey, clean);
