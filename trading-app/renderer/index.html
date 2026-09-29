@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Política de seguridad: sin scripts remotos; los datos los trae el proceso Node. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self';" />
+  <title>Trading Desk</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header>
+    <h1>Trading <span>Desk</span></h1>
+    <div class="disclaimer-badge">Uso personal · No es asesoramiento financiero</div>
+  </header>
+
+  <main>
+    <div class="controls">
+      <div class="field">
+        <label for="provider">Fuente de datos</label>
+        <select id="provider">
+          <option value="stooq">Stooq — acciones/índices</option>
+          <option value="yahoo">Yahoo — acciones/índices</option>
+          <option value="coingecko" selected>CoinGecko — cripto</option>
+          <option value="binance">Binance — cripto</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="symbol">Símbolo</label>
+        <input id="symbol" type="text" placeholder="bitcoin" />
+      </div>
+      <button id="analyze">Analizar</button>
+    </div>
+    <p class="hint" id="hint"></p>
+
+    <div class="status" id="status"></div>
+
+    <div id="results" class="hidden">
+      <h2 style="margin:0 0 14px; font-size:16px" id="res-title"></h2>
+      <div class="grid">
+        <div class="card">
+          <h2>Predicción del próximo movimiento</h2>
+          <div class="pred-row">
+            <canvas id="gauge" class="gauge"></canvas>
+            <div>
+              <div class="pred-prob" id="pred-prob">—</div>
+              <div class="pred-label" id="pred-label"></div>
+              <div class="pred-meta" id="pred-meta"></div>
+            </div>
+          </div>
+          <div class="pred-note">
+            Es una <strong>probabilidad estadística</strong>, no una certeza. Ningún modelo
+            predice de forma fiable el mercado. Mira siempre el backtest de al lado para saber
+            si esta señal ha acertado más que el azar en el pasado.
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>Backtest honesto (walk-forward)</h2>
+          <div id="backtest-box"></div>
+        </div>
+
+        <div class="card full">
+          <h2>Precio y medias móviles</h2>
+          <div class="legend">
+            <span><i class="dot" style="background:#4c8dff"></i> SMA 20</span>
+            <span><i class="dot" style="background:#d29922"></i> SMA 50</span>
+            <span><i class="dot" style="background:#2ea043"></i> vela alcista</span>
+            <span><i class="dot" style="background:#f85149"></i> vela bajista</span>
+          </div>
+          <canvas id="price-chart"></canvas>
+        </div>
+      </div>
+
+      <div class="footer-note">
+        <strong>Cómo leerlo.</strong> El modelo aprende patrones de los precios pasados y estima
+        la probabilidad de que el próximo cierre suba. El <em>backtest</em> entrena solo con el
+        pasado y comprueba, día a día, cuánto habría acertado — comparándolo con una regla tonta y
+        con "comprar y mantener". Si la ventaja es negativa o marginal, la señal no vale para decidir
+        dinero real. Esta app es una herramienta de estudio personal; <strong>no es asesoramiento
+        financiero</strong> y no incluye comisiones, impuestos ni deslizamiento.
+      </div>
+    </div>
+  </main>
+
+  <script src="chart.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
