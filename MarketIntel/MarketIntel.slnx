@@ -1,7 +1,0 @@
-<Solution>
-  <Folder Name="/src/">
-    <Project Path="src/MarketIntel.Api/MarketIntel.Api.csproj" />
-    <Project Path="src/MarketIntel.Maui/MarketIntel.Maui.csproj" />
-    <Project Path="src/MarketIntel.Shared/MarketIntel.Shared.csproj" />
-  </Folder>
-</Solution>
