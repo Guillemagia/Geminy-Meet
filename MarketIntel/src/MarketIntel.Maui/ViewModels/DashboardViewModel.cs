@@ -27,12 +27,31 @@ public sealed class DashboardViewModel : ObservableObject
         AddAlertCommand = new RelayCommand(_ => AddAlert());
         RemoveRuleCommand = new RelayCommand(o => RemoveRule(o as AlertRule));
         OpenSymbolCommand = new RelayCommand(o => { if (o is string s && !string.IsNullOrWhiteSpace(s)) OpenSymbolRequested?.Invoke(s); });
+        OpenNewsPanelCommand = new RelayCommand(_ => OpenNewsPanel());
 
         foreach (var r in _store.GetRules()) Rules.Add(r);
     }
 
     /// <summary>Raised when the user taps a watchlist item; the page handles navigation.</summary>
     public event Action<string>? OpenSymbolRequested;
+
+    /// <summary>The pre-market news panel is a local Windows app, so it's only offered there.</summary>
+    public bool IsNewsPanelAvailable => NewsPanelLauncher.IsSupported;
+
+    public RelayCommand OpenNewsPanelCommand { get; }
+
+    private void OpenNewsPanel()
+    {
+        try
+        {
+            if (!NewsPanelLauncher.TryLaunch(out var path))
+                Error = LocalizationResourceManager.Instance.Format("Dash_NewsPanelMissing", path);
+        }
+        catch (Exception ex)
+        {
+            Error = LocalizationResourceManager.Instance.Format("Dash_NewsPanelError", ex.Message);
+        }
+    }
 
     public ObservableCollection<OpportunityDto> Opportunities { get; } = [];
     public ObservableCollection<EconomicEventDto> Events { get; } = [];

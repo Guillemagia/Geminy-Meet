@@ -46,6 +46,9 @@
   "Plan_BadgeCurrent": "TU PLAN",
   "Lang_Header": "IDIOMA",
   "Dash_ConnectError": "No se pudo conectar con el backend ({0}). {1}",
+  "Dash_NewsPanel": "📰 Panel de noticias pre-apertura",
+  "Dash_NewsPanelMissing": "No se encontró el Panel de Trading en: {0}",
+  "Dash_NewsPanelError": "No se pudo abrir el Panel de Trading: {0}",
 
   "Detail_Paper": "📝 Paper",
   "Detail_AI": "🤖 IA",

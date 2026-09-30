@@ -196,6 +196,14 @@ El motor trabaja sobre velas OHLCV, así que es **agnóstico al activo**. Cubre:
 del scanner. Las ETF y la cripto no generan "earnings" (no hay riesgo de resultados empresariales).
 **Futuros**: pendientes — requieren un proveedor de datos aparte (de pago).
 
+## Panel de noticias pre-apertura
+
+En la versión **Windows** de la app, el dashboard muestra el botón **"📰 Panel de noticias
+pre-apertura"**, que abre la app de escritorio aparte **Panel Trading** (`NewsPanelLauncher`).
+Ruta por defecto: `D:\Trading study\Panel Trading-win32-x64\Panel Trading.exe` (se puede cambiar
+en `NewsPanelLauncher.ExePath` si mueves la carpeta). Como es un `.exe` local, en Android/iOS el
+botón no aparece. Si el `.exe` no está en esa ruta, la app avisa con la ruta que buscó.
+
 ## Hoja de ruta
 
 - **V1** — datos, indicadores, señal probabilística transparente, riesgo, scanner,

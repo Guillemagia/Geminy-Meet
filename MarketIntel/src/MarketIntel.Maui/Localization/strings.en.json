@@ -46,6 +46,9 @@
   "Plan_BadgeCurrent": "YOUR PLAN",
   "Lang_Header": "LANGUAGE",
   "Dash_ConnectError": "Couldn't connect to the backend ({0}). {1}",
+  "Dash_NewsPanel": "📰 Pre-market news panel",
+  "Dash_NewsPanelMissing": "Trading Panel not found at: {0}",
+  "Dash_NewsPanelError": "Couldn't open the Trading Panel: {0}",
 
   "Detail_Paper": "📝 Paper",
   "Detail_AI": "🤖 AI",
